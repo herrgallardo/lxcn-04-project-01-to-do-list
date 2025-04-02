@@ -15,13 +15,13 @@ namespace TodoListApp
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Title { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty; // New field
+        public string Description { get; set; } = string.Empty;
         public DateTime DueDate { get; set; }
-        public DateTime CreatedDate { get; set; } = DateTime.Now; // New field
+        public DateTime CreatedDate { get; set; } = DateTime.Now;
         public TaskStatus Status { get; set; } = TaskStatus.Pending;
         public string Project { get; set; } = string.Empty;
         public Priority Priority { get; set; } = Priority.Medium;
-        public List<string> Tags { get; set; } = new List<string>(); // New field
+        public List<string> Tags { get; set; } = new List<string>();
         public Recurrence Recurrence { get; set; } = Recurrence.None;
 
         // Computed properties
@@ -60,8 +60,8 @@ namespace TodoListApp
         public IEnumerable<Task> Search(string term) => _tasks.Where(t =>
             t.Title.Contains(term, StringComparison.OrdinalIgnoreCase) ||
             t.Project.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-            t.Description.Contains(term, StringComparison.OrdinalIgnoreCase) || // Search in description too
-            t.Tags.Any(tag => tag.Contains(term, StringComparison.OrdinalIgnoreCase))); // Search in tags too
+            t.Description.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+            t.Tags.Any(tag => tag.Contains(term, StringComparison.OrdinalIgnoreCase)));
         public Task? Find(Guid id) => _tasks.FirstOrDefault(t => t.Id == id);
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
         public void Delete(Guid id) { _tasks = _tasks.Where(t => t.Id != id).ToList(); Save(); }
@@ -88,10 +88,10 @@ namespace TodoListApp
                         var newTask = new Task
                         {
                             Title = task.Title,
-                            Description = task.Description, // Copy description
+                            Description = task.Description,
                             Project = task.Project,
                             Priority = task.Priority,
-                            Tags = new List<string>(task.Tags), // Copy tags
+                            Tags = new List<string>(task.Tags),
                             Recurrence = task.Recurrence,
                             DueDate = GetNextDueDate(task.DueDate, task.Recurrence),
                             Status = TaskStatus.Pending
@@ -129,12 +129,12 @@ namespace TodoListApp
                 var line = string.Join(",",
                     t.Id,
                     $"\"{t.Title.Replace("\"", "\"\"")}\"",
-                    $"\"{t.Description.Replace("\"", "\"\"")}\"", // Export description
+                    $"\"{t.Description.Replace("\"", "\"\"")}\"",
                     t.DueDate.ToString("yyyy-MM-dd"),
                     t.Status,
                     t.Project,
                     t.Priority,
-                    $"\"{string.Join(";", t.Tags).Replace("\"", "\"\"")}\"", // Export tags
+                    $"\"{string.Join(";", t.Tags).Replace("\"", "\"\"")}\"",
                     t.Recurrence
                 );
                 writer.WriteLine(line);
@@ -164,9 +164,23 @@ namespace TodoListApp
             }
         }
 
+        // New method to determine task color based on its properties
+        public static ConsoleColor GetTaskColor(Task task)
+        {
+            return task.Status == TaskStatus.Done ? ConsoleColor.Green :
+                   task.IsOverdue ? ConsoleColor.Red :
+                   task.IsDueSoon ? ConsoleColor.Yellow :
+                   task.Priority == Priority.Critical ? ConsoleColor.DarkRed :
+                   task.Priority == Priority.High ? ConsoleColor.DarkYellow :
+                   task.Status == TaskStatus.InProgress ? ConsoleColor.Cyan :
+                   ConsoleColor.White;
+        }
+
         public static void ShowTask(Task task)
         {
-            Console.WriteLine($"\nID: {task.Id}");
+            Console.ForegroundColor = GetTaskColor(task);
+            Console.WriteLine(new string('-', 40));
+            Console.WriteLine($"ID: {task.Id}");
             Console.WriteLine($"Title: {task.Title}");
 
             if (!string.IsNullOrWhiteSpace(task.Description))
@@ -181,6 +195,9 @@ namespace TodoListApp
                 Console.WriteLine($"Tags: {string.Join(", ", task.Tags)}");
 
             Console.WriteLine($"Recurs: {task.Recurrence}");
+
+            Console.WriteLine(new string('-', 40));
+            Console.ResetColor();
 
             if (task.IsOverdue)
             {
@@ -198,16 +215,39 @@ namespace TodoListApp
 
         public static void ListTasks(IEnumerable<Task> tasks)
         {
+            if (!tasks.Any())
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("No tasks found.");
+                Console.ResetColor();
+                return;
+            }
+
             foreach (var task in tasks)
             {
-                Console.ForegroundColor = task.Status == TaskStatus.Done ? ConsoleColor.Green :
-                                         task.IsOverdue ? ConsoleColor.Red :
-                                         task.IsDueSoon ? ConsoleColor.Yellow :
-                                         ConsoleColor.White;
+                Console.ForegroundColor = GetTaskColor(task);
+                Console.WriteLine($"- {task.Title} [{task.Status}] ({task.DueDate:yyyy-MM-dd})");
 
-                Console.WriteLine($"- {task.Title} [{task.Status}] ({task.DueDate:yyyy-MM-dd}) [{task.Recurrence}]");
+                if (!string.IsNullOrWhiteSpace(task.Project))
+                    Console.WriteLine($"  Project: {task.Project}");
+
+                if (task.Tags.Count > 0)
+                    Console.WriteLine($"  Tags: {string.Join(", ", task.Tags)}");
+
+                if (task.Priority == Priority.High || task.Priority == Priority.Critical)
+                    Console.WriteLine($"  Priority: {task.Priority}");
+
+                if (task.Recurrence != Recurrence.None)
+                    Console.WriteLine($"  Recurrence: {task.Recurrence}");
+
                 Console.ResetColor();
             }
+        }
+
+        // Helper method to truncate long strings for display
+        public static string TruncateString(string str, int maxLength)
+        {
+            return str.Length <= maxLength ? str : str.Substring(0, maxLength - 3) + "...";
         }
     }
 
