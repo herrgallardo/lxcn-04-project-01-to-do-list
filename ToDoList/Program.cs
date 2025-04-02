@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 
 namespace TodoListApp
 {
@@ -150,7 +151,6 @@ namespace TodoListApp
         public Task? Find(Guid id) => _tasks.FirstOrDefault(t => t.Id == id);
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
 
-        // Enhanced delete with undo functionality
         public bool Delete(Guid id)
         {
             var task = _tasks.FirstOrDefault(t => t.Id == id);
@@ -163,7 +163,6 @@ namespace TodoListApp
             return true;
         }
 
-        // Restores the most recently deleted task
         public bool UndoDelete()
         {
             if (_deletedTasks.Count == 0) return false;
@@ -176,7 +175,6 @@ namespace TodoListApp
             return true;
         }
 
-        // Bulk operations
         public bool BulkDelete(List<Guid> ids)
         {
             bool anyDeleted = false;
@@ -349,9 +347,9 @@ namespace TodoListApp
         public static void PrintTitle(string title)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("\n" + new string('=', 40));
-            Console.WriteLine(title);
-            Console.WriteLine(new string('=', 40));
+            Console.WriteLine("\n" + new string('=', 60));
+            Console.WriteLine($"  {title}");
+            Console.WriteLine(new string('=', 60));
             Console.ResetColor();
         }
 
@@ -359,7 +357,7 @@ namespace TodoListApp
         {
             foreach (var opt in options)
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
                 Console.Write($"[{opt.Key}] ");
                 Console.ResetColor();
                 Console.WriteLine(opt.Value);
@@ -380,7 +378,7 @@ namespace TodoListApp
         public static void ShowTask(Task task)
         {
             Console.ForegroundColor = GetTaskColor(task);
-            Console.WriteLine(new string('-', 40));
+            Console.WriteLine(new string('-', 60));
             Console.WriteLine($"ID: {task.Id}");
             Console.WriteLine($"Title: {task.Title}");
 
@@ -397,7 +395,7 @@ namespace TodoListApp
 
             Console.WriteLine($"Recurs: {task.Recurrence}");
 
-            Console.WriteLine(new string('-', 40));
+            Console.WriteLine(new string('-', 60));
             Console.ResetColor();
 
             if (task.IsOverdue)
@@ -424,24 +422,34 @@ namespace TodoListApp
                 return;
             }
 
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
+            Console.WriteLine($"{"ID",-36} | {"Title",-25} | {"Due Date",-10} | {"Project",-15} | {"Priority",-8} | {"Status",-10}");
+            Console.WriteLine(new string('-', 120));
+            Console.ResetColor();
+
+            // Add pagination for large task lists
+            int counter = 0;
             foreach (var task in tasks)
             {
                 Console.ForegroundColor = GetTaskColor(task);
-                Console.WriteLine($"- {task.Title} [{task.Status}] ({task.DueDate:yyyy-MM-dd})");
-
-                if (!string.IsNullOrWhiteSpace(task.Project))
-                    Console.WriteLine($"  Project: {task.Project}");
-
-                if (task.Tags.Count > 0)
-                    Console.WriteLine($"  Tags: {string.Join(", ", task.Tags)}");
-
-                if (task.Priority == Priority.High || task.Priority == Priority.Critical)
-                    Console.WriteLine($"  Priority: {task.Priority}");
-
-                if (task.Recurrence != Recurrence.None)
-                    Console.WriteLine($"  Recurrence: {task.Recurrence}");
-
+                Console.WriteLine($"{task.Id,-36} | {TruncateString(task.Title, 25),-25} | {task.DueDate:yyyy-MM-dd} | {TruncateString(task.Project, 15),-15} | {task.Priority,-8} | {task.Status,-10}");
                 Console.ResetColor();
+
+                counter++;
+                if (counter >= 20 && tasks.Count() > 20)
+                {
+                    Console.WriteLine("Press any key to see more tasks or ESC to return...");
+                    var key = Console.ReadKey(true);
+                    if (key.Key == ConsoleKey.Escape) break;
+                    counter = 0;
+                    Console.Clear();
+
+                    // Re-print header
+                    Console.ForegroundColor = ConsoleColor.DarkCyan;
+                    Console.WriteLine($"{"ID",-36} | {"Title",-25} | {"Due Date",-10} | {"Project",-15} | {"Priority",-8} | {"Status",-10}");
+                    Console.WriteLine(new string('-', 120));
+                    Console.ResetColor();
+                }
             }
         }
 
@@ -465,15 +473,39 @@ namespace TodoListApp
         {
             return str.Length <= maxLength ? str : str.Substring(0, maxLength - 3) + "...";
         }
+
+        // Show an animated loading/processing indicator
+        public static void ShowLoadingAnimation(string message, int duration)
+        {
+            Console.Write(message);
+            string[] animationFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+            int frameDelay = 100;
+
+            int totalFrames = duration / frameDelay;
+            for (int i = 0; i < totalFrames; i++)
+            {
+                Console.Write(animationFrames[i % animationFrames.Length]);
+                Thread.Sleep(frameDelay);
+                Console.Write("\b");
+            }
+
+            Console.WriteLine("Done!");
+        }
     }
 
     class Program
     {
+        static TaskManager taskManager = new();
+
+        // Track current sort settings for consistent UI experience
+        static string currentSortField = "date";
+        static bool sortAscending = true;
+
         static void Main(string[] args)
         {
-            var taskManager = new TaskManager();
-            bool exit = false;
+            DisplayWelcomeScreen();
 
+            bool exit = false;
             while (!exit)
             {
                 Console.Clear();
@@ -482,48 +514,594 @@ namespace TodoListApp
                 var menuOptions = new Dictionary<string, string>
                 {
                     { "A", "Add Task" },
-                    { "L", "List All Tasks" },
-                    { "P", "List Tasks by Project" },
-                    { "D", "List Tasks by Due Date" },
-                    { "F", "Find Task (Search)" },
+                    { "L", "List Tasks" },
                     { "V", "View Task Details" },
                     { "E", "Edit Task" },
-                    { "S", "Change Task Status" },
+                    { "P", "Change Task Status" },
                     { "R", "Remove Task" },
-                    { "B", "Bulk Operations" }, // New option
-                    { "U", "Undo Delete" }, // New option
-                    { "T", "Statistics" },
+                    { "B", "Bulk Operations" },
+                    { "S", "Statistics" },
+                    { "U", "Undo Delete" },
                     { "X", "Export Tasks to CSV" },
                     { "Q", "Quit" }
                 };
 
                 UIHelper.PrintMenu(menuOptions);
                 Console.Write("Select an option: ");
-                var input = Console.ReadLine()?.Trim().ToUpper();
+                var key = Console.ReadKey(true).Key;
+                Console.Clear();
 
-                switch (input)
+                try
                 {
-                    case "A": AddTask(taskManager); break;
-                    case "L": Show(taskManager.GetAll(), "All Tasks"); break;
-                    case "P": Show(taskManager.GetSortedByProject(), "Tasks by Project"); break;
-                    case "D": Show(taskManager.GetSortedByDate(), "Tasks by Due Date"); break;
-                    case "F": Search(taskManager); break;
-                    case "V": ViewTask(taskManager); break;
-                    case "E": EditTask(taskManager); break;
-                    case "S": ChangeStatus(taskManager); break;
-                    case "R": DeleteTask(taskManager); break;
-                    case "B": BulkOperations(taskManager); break; // New case
-                    case "U": UndoDelete(taskManager); break; // New case
-                    case "T": ShowStatistics(taskManager); break;
-                    case "X": taskManager.ExportToCsv(); Console.WriteLine("\nExported. Press any key..."); Console.ReadKey(); break;
-                    case "Q": exit = true; break;
-                    default: Console.WriteLine("Invalid option."); Console.ReadKey(); break;
+                    switch (key)
+                    {
+                        case ConsoleKey.A: AddTask(); break;
+                        case ConsoleKey.L: ListTasks(); break;
+                        case ConsoleKey.V: ViewTaskDetails(); break;
+                        case ConsoleKey.E: EditTask(); break;
+                        case ConsoleKey.P: ChangeStatus(); break;
+                        case ConsoleKey.R: DeleteTask(); break;
+                        case ConsoleKey.B: BulkOperations(); break;
+                        case ConsoleKey.S: ShowStatistics(); break;
+                        case ConsoleKey.U: UndoDelete(); break;
+                        case ConsoleKey.X: ExportTasks(); break;
+                        case ConsoleKey.Q: exit = true; Console.WriteLine("Goodbye!"); break;
+                        default: Console.WriteLine("Invalid option. Press any key to continue..."); Console.ReadKey(true); break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Global exception handler
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"An error occurred: {ex.Message}");
+                    Console.ResetColor();
+                    Console.WriteLine("Press any key to continue...");
+                    Console.ReadKey(true);
                 }
             }
         }
 
-        // New method for bulk operations
-        static void BulkOperations(TaskManager manager)
+        // New welcome screen with ASCII art logo
+        static void DisplayWelcomeScreen()
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+
+            string[] logo = {
+                @"  _______          _         _      _     _   ",
+                @" |__   __|        | |       | |    (_)   | |  ",
+                @"    | | ___   ___ | | ___   | |     _ ___| |_ ",
+                @"    | |/ _ \ / _ \| |/ _ \  | |    | / __| __|",
+                @"    | | (_) | (_) | | (_) | | |____| \__ \ |_ ",
+                @"    |_|\___/ \___/|_|\___/  |______|_|___/\__|"
+            };
+
+            foreach (var line in logo)
+            {
+                Console.WriteLine(line);
+            }
+
+            Console.ResetColor();
+
+            // Get statistics for the welcome screen
+            var stats = taskManager.GetTaskStatistics();
+
+            Console.WriteLine("\nWelcome to your enhanced Todo List!");
+            Console.WriteLine($"You have {stats["Pending"]} pending tasks and {stats["Completed"]} completed tasks.");
+
+            if (stats["Overdue"] > 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"⚠️  You have {stats["Overdue"]} overdue tasks!");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine("\nPress any key to continue...");
+            Console.ReadKey(true);
+        }
+
+        // Enhanced task listing with more filtering options
+        static void ListTasks()
+        {
+            // Show list options
+            UIHelper.PrintMenu(new Dictionary<string, string>
+            {
+                { "A", "All Tasks" },
+                { "P", "Pending Tasks" },
+                { "I", "In Progress Tasks" },
+                { "C", "Completed Tasks" },
+                { "O", "Overdue Tasks" },
+                { "T", "Tasks Due Today" },
+                { "W", "Tasks Due This Week" },
+                { "S", "Search Tasks" },
+                { "F", "Filter by Project" },
+                { "G", "Filter by Tag" }
+            });
+
+            Console.Write("Select an option: ");
+            var key = Console.ReadKey(true).Key;
+            Console.WriteLine();
+
+            // Variables for filtering
+            TaskStatus? status = null;
+            string? keyword = null;
+            DateTime? dueAfter = null;
+            DateTime? dueBefore = null;
+            string? project = null;
+            string? tag = null;
+
+            // Determine filtering based on selection
+            switch (key)
+            {
+                case ConsoleKey.A: // All tasks - no filter
+                    break;
+                case ConsoleKey.P:
+                    status = TaskStatus.Pending;
+                    break;
+                case ConsoleKey.I:
+                    status = TaskStatus.InProgress;
+                    break;
+                case ConsoleKey.C:
+                    status = TaskStatus.Done;
+                    break;
+                case ConsoleKey.O:
+                    status = TaskStatus.Pending;
+                    dueBefore = DateTime.Today;
+                    break;
+                case ConsoleKey.T:
+                    dueAfter = DateTime.Today;
+                    dueBefore = DateTime.Today;
+                    break;
+                case ConsoleKey.W:
+                    dueAfter = DateTime.Today;
+                    dueBefore = DateTime.Today.AddDays(7);
+                    break;
+                case ConsoleKey.S:
+                    Console.Write("Enter search term: ");
+                    keyword = Console.ReadLine();
+                    break;
+                case ConsoleKey.F:
+                    // Show available projects
+                    var projects = taskManager.GetAllProjects().ToList();
+                    if (projects.Count == 0)
+                    {
+                        Console.WriteLine("No projects found.");
+                        Console.ReadKey(true);
+                        return;
+                    }
+
+                    Console.WriteLine("Select a project:");
+                    for (int i = 0; i < projects.Count; i++)
+                    {
+                        Console.WriteLine($"[{i + 1}] {projects[i]}");
+                    }
+
+                    Console.Write("Enter project number: ");
+                    if (int.TryParse(Console.ReadLine(), out int projectIndex) &&
+                        projectIndex > 0 && projectIndex <= projects.Count)
+                    {
+                        project = projects[projectIndex - 1];
+                    }
+                    break;
+                case ConsoleKey.G:
+                    // Show available tags
+                    var tags = taskManager.GetAllTags().ToList();
+                    if (tags.Count == 0)
+                    {
+                        Console.WriteLine("No tags found.");
+                        Console.ReadKey(true);
+                        return;
+                    }
+
+                    Console.WriteLine("Select a tag:");
+                    for (int i = 0; i < tags.Count; i++)
+                    {
+                        Console.WriteLine($"[{i + 1}] {tags[i]}");
+                    }
+
+                    Console.Write("Enter tag number: ");
+                    if (int.TryParse(Console.ReadLine(), out int tagIndex) &&
+                        tagIndex > 0 && tagIndex <= tags.Count)
+                    {
+                        tag = tags[tagIndex - 1];
+                    }
+                    break;
+                default:
+                    return;
+            }
+
+            // Get tasks based on filters
+            var filteredTasks = taskManager.GetAll().Where(t =>
+                (!status.HasValue || t.Status == status.Value) &&
+                (string.IsNullOrWhiteSpace(keyword) ||
+                t.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                t.Description.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                t.Project.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                t.Tags.Any(tag => tag.Contains(keyword, StringComparison.OrdinalIgnoreCase))) &&
+                (!dueBefore.HasValue || t.DueDate <= dueBefore.Value) &&
+                (!dueAfter.HasValue || t.DueDate >= dueAfter.Value) &&
+                (string.IsNullOrWhiteSpace(project) || t.Project.Equals(project, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(tag) || t.Tags.Any(tg => tg.Equals(tag, StringComparison.OrdinalIgnoreCase)))
+            );
+
+            // Sort tasks
+            filteredTasks = currentSortField switch
+            {
+                "date" => sortAscending ? filteredTasks.OrderBy(t => t.DueDate) : filteredTasks.OrderByDescending(t => t.DueDate),
+                "project" => sortAscending ? filteredTasks.OrderBy(t => t.Project) : filteredTasks.OrderByDescending(t => t.Project),
+                "priority" => sortAscending ? filteredTasks.OrderBy(t => t.Priority) : filteredTasks.OrderByDescending(t => t.Priority),
+                "title" => sortAscending ? filteredTasks.OrderBy(t => t.Title) : filteredTasks.OrderByDescending(t => t.Title),
+                "status" => sortAscending ? filteredTasks.OrderBy(t => t.Status) : filteredTasks.OrderByDescending(t => t.Status),
+                _ => filteredTasks.OrderBy(t => t.DueDate)
+            };
+
+            Console.Clear();
+
+            // Print header with filter info
+            string filterInfo = key switch
+            {
+                ConsoleKey.A => "All Tasks",
+                ConsoleKey.P => "Pending Tasks",
+                ConsoleKey.I => "In Progress Tasks",
+                ConsoleKey.C => "Completed Tasks",
+                ConsoleKey.O => "Overdue Tasks",
+                ConsoleKey.T => "Tasks Due Today",
+                ConsoleKey.W => "Tasks Due This Week",
+                ConsoleKey.S => $"Search Results for '{keyword}'",
+                ConsoleKey.F => $"Tasks in Project '{project}'",
+                ConsoleKey.G => $"Tasks with Tag '{tag}'",
+                _ => "Tasks"
+            };
+
+            UIHelper.PrintTitle(filterInfo);
+
+            // Show sort options
+            Console.WriteLine("Sort by: [D]ate | [P]roject | [R]iority | [S]tatus | [T]itle | [↑/↓] Direction");
+            Console.WriteLine($"Current sort: {currentSortField} ({(sortAscending ? "ascending" : "descending")})");
+            Console.WriteLine();
+
+            UIHelper.ListTasks(filteredTasks);
+
+            Console.WriteLine("\nSort: [D]ate | [P]roject | [R]iority | [S]tatus | [T]itle | [↑/↓] Direction | Any other key to return");
+            var sortKey = Console.ReadKey(true).Key;
+
+            // Update sort field based on key press
+            switch (sortKey)
+            {
+                case ConsoleKey.D:
+                    currentSortField = "date";
+                    break;
+                case ConsoleKey.P:
+                    currentSortField = "project";
+                    break;
+                case ConsoleKey.R:
+                    currentSortField = "priority";
+                    break;
+                case ConsoleKey.S:
+                    currentSortField = "status";
+                    break;
+                case ConsoleKey.T:
+                    currentSortField = "title";
+                    break;
+                case ConsoleKey.UpArrow:
+                case ConsoleKey.DownArrow:
+                    sortAscending = !sortAscending;
+                    // Recurse to show the same list with new sort direction
+                    ListTasks();
+                    return;
+                default:
+                    return;
+            }
+
+            // Recurse to show the same list with new sort field
+            if (sortKey is ConsoleKey.D or ConsoleKey.P or ConsoleKey.R or ConsoleKey.S or ConsoleKey.T)
+            {
+                ListTasks();
+            }
+        }
+
+        static void ViewTaskDetails()
+        {
+            UIHelper.PrintTitle("View Task Details");
+
+            Console.Write("Enter Task ID: ");
+            if (!Guid.TryParse(Console.ReadLine(), out var id))
+            {
+                Console.WriteLine("Invalid ID format.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            var task = taskManager.Find(id);
+            if (task == null)
+            {
+                Console.WriteLine("Task not found.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            UIHelper.ShowTask(task);
+            Console.WriteLine("\nPress any key to return...");
+            Console.ReadKey(true);
+        }
+
+        static void AddTask()
+        {
+            UIHelper.PrintTitle("Add New Task");
+
+            Console.Write("Title: ");
+            var title = Console.ReadLine() ?? string.Empty;
+
+            Console.Write("Description (optional): ");
+            var description = Console.ReadLine() ?? string.Empty;
+
+            Console.Write("Due Date (today/tomorrow/next week or YYYY-MM-DD): ");
+            var due = NaturalDateParser.Parse(Console.ReadLine() ?? "");
+
+            Console.Write("Project: ");
+            var project = Console.ReadLine() ?? string.Empty;
+
+            Console.WriteLine("Priority:");
+            Console.WriteLine("[1] Low | [2] Medium | [3] High | [4] Critical");
+            var priority = Console.ReadKey(true).KeyChar switch
+            {
+                '1' => Priority.Low,
+                '3' => Priority.High,
+                '4' => Priority.Critical,
+                _ => Priority.Medium // Default
+            };
+            Console.WriteLine($"Selected Priority: {priority}");
+
+            Console.Write("Tags (comma separated, optional): ");
+            var tagsInput = Console.ReadLine() ?? string.Empty;
+            var tags = !string.IsNullOrWhiteSpace(tagsInput)
+                ? tagsInput.Split(',').Select(t => t.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
+                : new List<string>();
+
+            Console.Write("Is this a recurring task? (y/n): ");
+            var isRecurring = Console.ReadKey().KeyChar.ToString().ToLower() == "y";
+            Console.WriteLine();
+
+            Recurrence recurrence = Recurrence.None;
+            if (isRecurring)
+            {
+                Console.WriteLine("Recurrence Pattern:");
+                Console.WriteLine("[D] Daily | [W] Weekly | [M] Monthly | [Y] Yearly | [K] Weekdays | [E] Weekends");
+                recurrence = Console.ReadKey(true).KeyChar.ToString().ToUpper() switch
+                {
+                    "D" => Recurrence.Daily,
+                    "W" => Recurrence.Weekly,
+                    "M" => Recurrence.Monthly,
+                    "Y" => Recurrence.Yearly,
+                    "K" => Recurrence.Weekdays,
+                    "E" => Recurrence.Weekends,
+                    _ => Recurrence.Daily // Default
+                };
+                Console.WriteLine($"Selected Recurrence: {recurrence}");
+            }
+
+            taskManager.Add(new Task
+            {
+                Title = title,
+                Description = description,
+                DueDate = due,
+                Project = project,
+                Priority = priority,
+                Tags = tags,
+                Recurrence = recurrence
+            });
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\n✅ Task added successfully!");
+            Console.ResetColor();
+
+            UIHelper.ShowLoadingAnimation("Saving... ", 500);
+
+            Console.WriteLine("Press any key to continue...");
+            Console.ReadKey();
+        }
+
+        static void EditTask()
+        {
+            UIHelper.PrintTitle("Edit Task");
+
+            Console.Write("Enter task ID: ");
+            if (!Guid.TryParse(Console.ReadLine(), out var id))
+            {
+                Console.WriteLine("Invalid ID format.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            var task = taskManager.Find(id);
+            if (task == null)
+            {
+                Console.WriteLine("Task not found.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            Console.WriteLine("Current task details:");
+            UIHelper.ShowTask(task);
+            Console.WriteLine("Leave fields blank to keep current values.");
+
+            Console.Write($"New Title [{task.Title}]: ");
+            var title = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(title)) task.Title = title;
+
+            Console.Write($"New Description [{task.Description}]: ");
+            var description = Console.ReadLine();
+            if (description != null) task.Description = description;
+
+            Console.Write($"New Due Date [{task.DueDate:yyyy-MM-dd}]: ");
+            var dateInput = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(dateInput)) task.DueDate = NaturalDateParser.Parse(dateInput);
+
+            Console.Write($"New Project [{task.Project}]: ");
+            var project = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(project)) task.Project = project;
+
+            Console.WriteLine($"New Priority [{task.Priority}]:");
+            Console.WriteLine("[1] Low | [2] Medium | [3] High | [4] Critical | [Enter] Keep current");
+            var key = Console.ReadKey(true).KeyChar;
+            switch (key)
+            {
+                case '1': task.Priority = Priority.Low; break;
+                case '2': task.Priority = Priority.Medium; break;
+                case '3': task.Priority = Priority.High; break;
+                case '4': task.Priority = Priority.Critical; break;
+            }
+
+            Console.Write($"New Tags [{string.Join(", ", task.Tags)}]: ");
+            var tagsInput = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(tagsInput))
+            {
+                task.Tags = tagsInput.Split(',')
+                    .Select(t => t.Trim())
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .ToList();
+            }
+
+            Console.Write($"Is this a recurring task? (y/n/[Enter] keep current [{(task.Recurrence != Recurrence.None ? "y" : "n")}]): ");
+            var recurKey = Console.ReadKey();
+            Console.WriteLine();
+
+            if (recurKey.KeyChar.ToString().ToLower() == "y" ||
+                (recurKey.Key == ConsoleKey.Enter && task.Recurrence != Recurrence.None))
+            {
+                Console.WriteLine("Recurrence Pattern:");
+                Console.WriteLine("[D] Daily | [W] Weekly | [M] Monthly | [Y] Yearly | [K] Weekdays | [E] Weekends");
+                task.Recurrence = Console.ReadKey(true).KeyChar.ToString().ToUpper() switch
+                {
+                    "D" => Recurrence.Daily,
+                    "W" => Recurrence.Weekly,
+                    "M" => Recurrence.Monthly,
+                    "Y" => Recurrence.Yearly,
+                    "K" => Recurrence.Weekdays,
+                    "E" => Recurrence.Weekends,
+                    _ => task.Recurrence // Keep current if invalid input
+                };
+                Console.WriteLine($"Selected Recurrence: {task.Recurrence}");
+            }
+            else if (recurKey.KeyChar.ToString().ToLower() == "n")
+            {
+                task.Recurrence = Recurrence.None;
+            }
+
+            taskManager.Update(task);
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\n✅ Task updated successfully!");
+            Console.ResetColor();
+
+            Console.WriteLine("Press any key to continue...");
+            Console.ReadKey();
+        }
+
+        static void ChangeStatus()
+        {
+            UIHelper.PrintTitle("Change Task Status");
+
+            Console.Write("Task ID: ");
+            if (!Guid.TryParse(Console.ReadLine(), out var id))
+            {
+                Console.WriteLine("Invalid ID format.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            var task = taskManager.Find(id);
+            if (task == null)
+            {
+                Console.WriteLine("Task not found.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            Console.WriteLine($"Current Status: {task.Status}");
+            Console.WriteLine("[P] Pending | [I] In Progress | [D] Done");
+            Console.Write("New Status: ");
+
+            var key = Console.ReadKey(true).Key;
+            TaskStatus newStatus = key switch
+            {
+                ConsoleKey.P => TaskStatus.Pending,
+                ConsoleKey.I => TaskStatus.InProgress,
+                ConsoleKey.D => TaskStatus.Done,
+                _ => task.Status
+            };
+
+            if (newStatus == task.Status)
+            {
+                Console.WriteLine("Status unchanged.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            task.Status = newStatus;
+            taskManager.Update(task);
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"\n✅ Task status updated to {newStatus}!");
+            Console.ResetColor();
+
+            Console.WriteLine("Press any key to continue...");
+            Console.ReadKey();
+        }
+
+        static void DeleteTask()
+        {
+            UIHelper.PrintTitle("Remove Task");
+
+            Console.Write("Task ID: ");
+            if (!Guid.TryParse(Console.ReadLine(), out var id))
+            {
+                Console.WriteLine("Invalid ID format.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            var task = taskManager.Find(id);
+            if (task == null)
+            {
+                Console.WriteLine("Task not found.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            Console.WriteLine("Task to be removed:");
+            UIHelper.ShowTask(task);
+
+            Console.Write("Are you sure you want to remove this task? (y/n): ");
+            if (Console.ReadKey().KeyChar.ToString().ToLower() != "y")
+            {
+                Console.WriteLine("\nTask removal cancelled.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            Console.WriteLine();
+            var removed = taskManager.Delete(id);
+
+            if (removed)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\n✅ Task removed successfully!");
+                Console.ResetColor();
+                Console.WriteLine("You can use the 'U' option to undo this deletion if needed.");
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("\n❌ Failed to remove task.");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine("Press any key to continue...");
+            Console.ReadKey();
+        }
+
+        static void BulkOperations()
         {
             UIHelper.PrintMenu(new Dictionary<string, string>
             {
@@ -571,11 +1149,11 @@ namespace TodoListApp
             switch (key)
             {
                 case ConsoleKey.M:
-                    success = manager.BulkUpdateStatus(ids, TaskStatus.Done);
+                    success = taskManager.BulkUpdateStatus(ids, TaskStatus.Done);
                     operationName = "marked as done";
                     break;
                 case ConsoleKey.P:
-                    success = manager.BulkUpdateStatus(ids, TaskStatus.InProgress);
+                    success = taskManager.BulkUpdateStatus(ids, TaskStatus.InProgress);
                     operationName = "marked as in progress";
                     break;
                 case ConsoleKey.D:
@@ -583,7 +1161,7 @@ namespace TodoListApp
                     if (Console.ReadKey().KeyChar.ToString().ToLower() == "y")
                     {
                         Console.WriteLine();
-                        success = manager.BulkDelete(ids);
+                        success = taskManager.BulkDelete(ids);
                         operationName = "deleted";
                     }
                     else
@@ -612,39 +1190,17 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
-        // New method for undo delete
-        static void UndoDelete(TaskManager manager)
+        static void ShowStatistics()
         {
-            var success = manager.UndoDelete();
-
-            if (success)
-            {
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("✅ Last deleted task restored successfully!");
-                Console.ResetColor();
-            }
-            else
-            {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("No recently deleted tasks to restore.");
-                Console.ResetColor();
-            }
-
-            Console.WriteLine("Press any key to continue...");
-            Console.ReadKey();
-        }
-
-        static void ShowStatistics(TaskManager manager)
-        {
-            var stats = manager.GetTaskStatistics();
+            var stats = taskManager.GetTaskStatistics();
             UIHelper.DisplayStatistics(stats);
 
             // Also show projects breakdown
             Console.WriteLine("\n--- Projects Breakdown ---");
-            var allProjects = manager.GetAllProjects().ToList();
+            var allProjects = taskManager.GetAllProjects().ToList();
             foreach (var project in allProjects)
             {
-                var projectTasks = manager.GetAll().Where(t => t.Project == project).ToList();
+                var projectTasks = taskManager.GetAll().Where(t => t.Project == project).ToList();
                 var completedCount = projectTasks.Count(t => t.Status == TaskStatus.Done);
                 var pendingCount = projectTasks.Count(t => t.Status == TaskStatus.Pending);
                 var inProgressCount = projectTasks.Count(t => t.Status == TaskStatus.InProgress);
@@ -668,207 +1224,42 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
-        static void Show(IEnumerable<Task> tasks, string title)
+        static void UndoDelete()
         {
-            UIHelper.PrintTitle(title);
-            UIHelper.ListTasks(tasks);
-            Console.WriteLine("\nPress any key to return...");
-            Console.ReadKey();
-        }
+            UIHelper.PrintTitle("Undo Delete");
 
-        static void AddTask(TaskManager manager)
-        {
-            UIHelper.PrintTitle("Add New Task");
-            Console.Write("Title: ");
-            var title = Console.ReadLine() ?? "Untitled";
+            var success = taskManager.UndoDelete();
 
-            Console.Write("Description (optional): ");
-            var description = Console.ReadLine() ?? "";
-
-            Console.Write("Due Date (e.g. tomorrow, next friday, in 3 days): ");
-            var due = NaturalDateParser.Parse(Console.ReadLine() ?? "");
-
-            Console.Write("Project: ");
-            var project = Console.ReadLine() ?? "General";
-
-            Console.WriteLine("Priority: [1] Low, [2] Medium, [3] High, [4] Critical");
-            var key = Console.ReadKey(true).KeyChar;
-            var priority = key switch
+            if (success)
             {
-                '1' => Priority.Low,
-                '3' => Priority.High,
-                '4' => Priority.Critical,
-                _ => Priority.Medium
-            };
-
-            Console.Write("Tags (comma separated, optional): ");
-            var tagsInput = Console.ReadLine() ?? "";
-            var tags = !string.IsNullOrWhiteSpace(tagsInput)
-                ? tagsInput.Split(',').Select(t => t.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
-                : new List<string>();
-
-            Console.WriteLine("Recurrence: [0] None, [1] Daily, [2] Weekly, [3] Monthly, [4] Yearly, [5] Weekdays, [6] Weekends");
-            var recurKey = Console.ReadKey(true).KeyChar;
-            var recurrence = recurKey switch
-            {
-                '1' => Recurrence.Daily,
-                '2' => Recurrence.Weekly,
-                '3' => Recurrence.Monthly,
-                '4' => Recurrence.Yearly,
-                '5' => Recurrence.Weekdays,
-                '6' => Recurrence.Weekends,
-                _ => Recurrence.None
-            };
-
-            manager.Add(new Task
-            {
-                Title = title,
-                Description = description,
-                DueDate = due,
-                Project = project,
-                Priority = priority,
-                Tags = tags,
-                Recurrence = recurrence
-            });
-
-            Console.WriteLine("\nTask added. Press any key to continue...");
-            Console.ReadKey();
-        }
-
-        static void Search(TaskManager manager)
-        {
-            UIHelper.PrintTitle("Search Tasks");
-            Console.Write("Enter search term: ");
-            var term = Console.ReadLine()?.Trim();
-            if (!string.IsNullOrWhiteSpace(term))
-                Show(manager.Search(term), $"Search Results for '{term}'");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("✅ Last deleted task restored successfully!");
+                Console.ResetColor();
+            }
             else
             {
-                Console.WriteLine("Invalid input.");
-                Console.ReadKey();
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("No recently deleted tasks to restore.");
+                Console.ResetColor();
             }
-        }
 
-        static void ViewTask(TaskManager manager)
-        {
-            UIHelper.PrintTitle("View Task Details");
-            Console.Write("Enter task ID: ");
-            if (Guid.TryParse(Console.ReadLine(), out var id))
-            {
-                var task = manager.Find(id);
-                if (task != null) UIHelper.ShowTask(task);
-                else Console.WriteLine("Task not found.");
-            }
-            else Console.WriteLine("Invalid ID format.");
-            Console.WriteLine("\nPress any key to return...");
+            Console.WriteLine("Press any key to continue...");
             Console.ReadKey();
         }
 
-        static void EditTask(TaskManager manager)
+        static void ExportTasks()
         {
-            UIHelper.PrintTitle("Edit Task");
-            Console.Write("Enter task ID: ");
-            if (!Guid.TryParse(Console.ReadLine(), out var id)) { Console.WriteLine("Invalid ID."); Console.ReadKey(); return; }
-            var task = manager.Find(id);
-            if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
-            Console.WriteLine("Leave fields blank to keep existing.");
+            UIHelper.PrintTitle("Export Tasks to CSV");
 
-            Console.Write($"Title [{task.Title}]: ");
-            var t = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(t)) task.Title = t;
+            UIHelper.ShowLoadingAnimation("Exporting tasks to CSV... ", 1000);
 
-            Console.Write($"Description [{task.Description}]: ");
-            var desc = Console.ReadLine();
-            if (desc != null) task.Description = desc;
+            taskManager.ExportToCsv();
 
-            Console.Write($"Due Date [{task.DueDate:yyyy-MM-dd}]: ");
-            var d = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(d)) task.DueDate = NaturalDateParser.Parse(d);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\n✅ Tasks exported successfully to 'tasks_export.csv' in the application directory!");
+            Console.ResetColor();
 
-            Console.Write($"Project [{task.Project}]: ");
-            var p = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(p)) task.Project = p;
-
-            Console.WriteLine($"Priority [{task.Priority}]: [1] Low, [2] Medium, [3] High, [4] Critical");
-            var prioKey = Console.ReadKey(true).KeyChar;
-            task.Priority = prioKey switch
-            {
-                '1' => Priority.Low,
-                '3' => Priority.High,
-                '4' => Priority.Critical,
-                _ => task.Priority
-            };
-
-            Console.Write($"Tags [{string.Join(", ", task.Tags)}]: ");
-            var tagsInput = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(tagsInput))
-            {
-                task.Tags = tagsInput.Split(',')
-                    .Select(t => t.Trim())
-                    .Where(t => !string.IsNullOrWhiteSpace(t))
-                    .ToList();
-            }
-
-            Console.WriteLine($"Recurrence [{task.Recurrence}]: [0] None, [1] Daily, [2] Weekly, [3] Monthly, [4] Yearly, [5] Weekdays, [6] Weekends");
-            var recurKey = Console.ReadKey(true).KeyChar;
-            task.Recurrence = recurKey switch
-            {
-                '1' => Recurrence.Daily,
-                '2' => Recurrence.Weekly,
-                '3' => Recurrence.Monthly,
-                '4' => Recurrence.Yearly,
-                '5' => Recurrence.Weekdays,
-                '6' => Recurrence.Weekends,
-                '0' => Recurrence.None,
-                _ => task.Recurrence
-            };
-
-            manager.Update(task);
-            Console.WriteLine("\nTask updated. Press any key to return...");
-            Console.ReadKey();
-        }
-
-        static void ChangeStatus(TaskManager manager)
-        {
-            UIHelper.PrintTitle("Change Task Status");
-            Console.Write("Enter task ID: ");
-            if (!Guid.TryParse(Console.ReadLine(), out var id)) { Console.WriteLine("Invalid ID."); Console.ReadKey(); return; }
-            var task = manager.Find(id);
-            if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
-            Console.WriteLine($"Current Status: {task.Status}");
-            Console.WriteLine("[1] Pending, [2] In Progress, [3] Done");
-            var statusKey = Console.ReadKey(true).KeyChar;
-            task.Status = statusKey switch
-            {
-                '1' => TaskStatus.Pending,
-                '2' => TaskStatus.InProgress,
-                '3' => TaskStatus.Done,
-                _ => task.Status
-            };
-            manager.Update(task);
-            Console.WriteLine("\nStatus updated. Press any key to continue...");
-            Console.ReadKey();
-        }
-
-        static void DeleteTask(TaskManager manager)
-        {
-            UIHelper.PrintTitle("Delete Task");
-            Console.Write("Enter task ID: ");
-            if (!Guid.TryParse(Console.ReadLine(), out var id)) { Console.WriteLine("Invalid ID."); Console.ReadKey(); return; }
-            var task = manager.Find(id);
-            if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
-            UIHelper.ShowTask(task);
-            Console.Write("Confirm delete? (y/n): ");
-            if ((Console.ReadLine() ?? "n").Trim().ToLower() == "y")
-            {
-                var deleted = manager.Delete(id);
-                if (deleted)
-                    Console.WriteLine("Deleted. You can use 'U' option to undo if needed.");
-                else
-                    Console.WriteLine("Failed to delete task.");
-            }
-            else Console.WriteLine("Cancelled.");
-            Console.WriteLine("\nPress any key to continue...");
+            Console.WriteLine("Press any key to continue...");
             Console.ReadKey();
         }
     }
