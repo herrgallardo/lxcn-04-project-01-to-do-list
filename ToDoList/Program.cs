@@ -9,7 +9,7 @@ namespace TodoListApp
 {
     public enum TaskStatus { Pending, InProgress, Done }
     public enum Priority { Low, Medium, High, Critical }
-    public enum Recurrence { None, Daily, Weekly, Monthly }
+    public enum Recurrence { None, Daily, Weekly, Monthly, Yearly, Weekdays, Weekends }
 
     public class Task
     {
@@ -31,17 +31,108 @@ namespace TodoListApp
 
     public static class NaturalDateParser
     {
+        // Enhanced date parser with more human-friendly formats
         public static DateTime Parse(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
+
             input = input.ToLowerInvariant().Trim();
+
             return input switch
             {
                 "today" => DateTime.Today,
                 "tomorrow" => DateTime.Today.AddDays(1),
                 "next week" => DateTime.Today.AddDays(7),
-                _ => DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result) ? result : DateTime.Today
+                "yesterday" => DateTime.Today.AddDays(-1),
+                "next month" => DateTime.Today.AddMonths(1),
+                "next year" => DateTime.Today.AddYears(1),
+                "monday" or "mon" => GetNextWeekday(DayOfWeek.Monday),
+                "tuesday" or "tue" => GetNextWeekday(DayOfWeek.Tuesday),
+                "wednesday" or "wed" => GetNextWeekday(DayOfWeek.Wednesday),
+                "thursday" or "thu" => GetNextWeekday(DayOfWeek.Thursday),
+                "friday" or "fri" => GetNextWeekday(DayOfWeek.Friday),
+                "saturday" or "sat" => GetNextWeekday(DayOfWeek.Saturday),
+                "sunday" or "sun" => GetNextWeekday(DayOfWeek.Sunday),
+                "end of week" => GetEndOfWeek(),
+                "end of month" => GetEndOfMonth(),
+                "end of year" => new DateTime(DateTime.Today.Year, 12, 31),
+                _ when input.StartsWith("in ") => ParseRelativeDate(input[3..]),
+                _ when input.StartsWith("next ") => ParseNextOccurrence(input[5..]),
+                _ => TryParseStandardDate(input)
             };
+        }
+
+        // Calculates the date of the next occurrence of the specified day of week
+        private static DateTime GetNextWeekday(DayOfWeek dayOfWeek)
+        {
+            DateTime date = DateTime.Today;
+            int daysToAdd = ((int)dayOfWeek - (int)date.DayOfWeek + 7) % 7;
+            if (daysToAdd == 0) daysToAdd = 7; // If today is the target day, get next week
+            return date.AddDays(daysToAdd);
+        }
+
+        // Returns the date of the upcoming Sunday (end of the current week)
+        private static DateTime GetEndOfWeek()
+        {
+            DateTime date = DateTime.Today;
+            int daysToAdd = ((int)DayOfWeek.Sunday - (int)date.DayOfWeek + 7) % 7;
+            return date.AddDays(daysToAdd);
+        }
+
+        // Returns the last day of the current month
+        private static DateTime GetEndOfMonth()
+        {
+            DateTime date = DateTime.Today;
+            return new DateTime(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month));
+        }
+
+        // Handles expressions like "next monday", "next month", etc.
+        private static DateTime ParseNextOccurrence(string occurrence)
+        {
+            return occurrence switch
+            {
+                "monday" or "mon" => GetNextWeekday(DayOfWeek.Monday),
+                "tuesday" or "tue" => GetNextWeekday(DayOfWeek.Tuesday),
+                "wednesday" or "wed" => GetNextWeekday(DayOfWeek.Wednesday),
+                "thursday" or "thu" => GetNextWeekday(DayOfWeek.Thursday),
+                "friday" or "fri" => GetNextWeekday(DayOfWeek.Friday),
+                "saturday" or "sat" => GetNextWeekday(DayOfWeek.Saturday),
+                "sunday" or "sun" => GetNextWeekday(DayOfWeek.Sunday),
+                "week" => DateTime.Today.AddDays(7),
+                "month" => DateTime.Today.AddMonths(1),
+                "year" => DateTime.Today.AddYears(1),
+                _ => DateTime.Today
+            };
+        }
+
+        // Handles expressions like "in 3 days", "in 2 weeks", etc.
+        private static DateTime ParseRelativeDate(string relativeInput)
+        {
+            var parts = relativeInput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2 || !int.TryParse(parts[0], out int amount)) return DateTime.Today;
+
+            return parts[1] switch
+            {
+                "day" or "days" => DateTime.Today.AddDays(amount),
+                "week" or "weeks" => DateTime.Today.AddDays(amount * 7),
+                "month" or "months" => DateTime.Today.AddMonths(amount),
+                "year" or "years" => DateTime.Today.AddYears(amount),
+                _ => DateTime.Today
+            };
+        }
+
+        // Attempts to parse date strings in various standard formats
+        private static DateTime TryParseStandardDate(string input)
+        {
+            string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "d-MMM", "d-MMM-yyyy", "d MMM", "d MMM yyyy" };
+
+            if (DateTime.TryParseExact(input, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var exactResult))
+                return exactResult;
+
+            if (DateTime.TryParse(input, out var result))
+                return result;
+
+            return DateTime.Today;
         }
     }
 
@@ -66,7 +157,6 @@ namespace TodoListApp
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
         public void Delete(Guid id) { _tasks = _tasks.Where(t => t.Id != id).ToList(); Save(); }
 
-        // Get a list of all unique project names
         public IEnumerable<string> GetAllProjects()
         {
             return _tasks.Select(t => t.Project)
@@ -75,7 +165,6 @@ namespace TodoListApp
                         .OrderBy(p => p);
         }
 
-        // Get a list of all unique tags
         public IEnumerable<string> GetAllTags()
         {
             return _tasks.SelectMany(t => t.Tags)
@@ -84,7 +173,6 @@ namespace TodoListApp
                         .OrderBy(t => t);
         }
 
-        // New method to get task statistics
         public Dictionary<string, int> GetTaskStatistics()
         {
             return new Dictionary<string, int>
@@ -152,8 +240,33 @@ namespace TodoListApp
             Recurrence.Daily => current.AddDays(1),
             Recurrence.Weekly => current.AddDays(7),
             Recurrence.Monthly => current.AddMonths(1),
+            Recurrence.Yearly => current.AddYears(1),
+            Recurrence.Weekdays => GetNextWeekday(current),
+            Recurrence.Weekends => GetNextWeekend(current),
             _ => current
         };
+
+        // Helper method to get the next weekday (Monday-Friday) from a given date
+        private DateTime GetNextWeekday(DateTime date)
+        {
+            date = date.AddDays(1);
+            while (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
+            {
+                date = date.AddDays(1);
+            }
+            return date;
+        }
+
+        // Helper method to get the next weekend day (Saturday or Sunday) from a given date
+        private DateTime GetNextWeekend(DateTime date)
+        {
+            date = date.AddDays(1);
+            while (date.DayOfWeek != DayOfWeek.Saturday && date.DayOfWeek != DayOfWeek.Sunday)
+            {
+                date = date.AddDays(1);
+            }
+            return date;
+        }
 
         public void ExportToCsv()
         {
@@ -279,7 +392,6 @@ namespace TodoListApp
             }
         }
 
-        // New method to display statistics
         public static void DisplayStatistics(Dictionary<string, int> stats)
         {
             PrintTitle("Task Statistics");
@@ -325,7 +437,7 @@ namespace TodoListApp
                     { "E", "Edit Task" },
                     { "S", "Change Task Status" },
                     { "R", "Remove Task" },
-                    { "T", "Statistics" }, // New option
+                    { "T", "Statistics" },
                     { "X", "Export Tasks to CSV" },
                     { "Q", "Quit" }
                 };
@@ -345,7 +457,7 @@ namespace TodoListApp
                     case "E": EditTask(taskManager); break;
                     case "S": ChangeStatus(taskManager); break;
                     case "R": DeleteTask(taskManager); break;
-                    case "T": ShowStatistics(taskManager); break; // New case
+                    case "T": ShowStatistics(taskManager); break;
                     case "X": taskManager.ExportToCsv(); Console.WriteLine("\nExported. Press any key..."); Console.ReadKey(); break;
                     case "Q": exit = true; break;
                     default: Console.WriteLine("Invalid option."); Console.ReadKey(); break;
@@ -353,7 +465,6 @@ namespace TodoListApp
             }
         }
 
-        // New method to display statistics
         static void ShowStatistics(TaskManager manager)
         {
             var stats = manager.GetTaskStatistics();
@@ -405,7 +516,7 @@ namespace TodoListApp
             Console.Write("Description (optional): ");
             var description = Console.ReadLine() ?? "";
 
-            Console.Write("Due Date (e.g. tomorrow, 2024-12-01): ");
+            Console.Write("Due Date (e.g. tomorrow, next friday, in 3 days): ");
             var due = NaturalDateParser.Parse(Console.ReadLine() ?? "");
 
             Console.Write("Project: ");
@@ -427,13 +538,16 @@ namespace TodoListApp
                 ? tagsInput.Split(',').Select(t => t.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
                 : new List<string>();
 
-            Console.WriteLine("Recurrence: [0] None, [1] Daily, [2] Weekly, [3] Monthly");
+            Console.WriteLine("Recurrence: [0] None, [1] Daily, [2] Weekly, [3] Monthly, [4] Yearly, [5] Weekdays, [6] Weekends");
             var recurKey = Console.ReadKey(true).KeyChar;
             var recurrence = recurKey switch
             {
                 '1' => Recurrence.Daily,
                 '2' => Recurrence.Weekly,
                 '3' => Recurrence.Monthly,
+                '4' => Recurrence.Yearly,
+                '5' => Recurrence.Weekdays,
+                '6' => Recurrence.Weekends,
                 _ => Recurrence.None
             };
 
@@ -525,6 +639,20 @@ namespace TodoListApp
                     .Where(t => !string.IsNullOrWhiteSpace(t))
                     .ToList();
             }
+
+            Console.WriteLine($"Recurrence [{task.Recurrence}]: [0] None, [1] Daily, [2] Weekly, [3] Monthly, [4] Yearly, [5] Weekdays, [6] Weekends");
+            var recurKey = Console.ReadKey(true).KeyChar;
+            task.Recurrence = recurKey switch
+            {
+                '1' => Recurrence.Daily,
+                '2' => Recurrence.Weekly,
+                '3' => Recurrence.Monthly,
+                '4' => Recurrence.Yearly,
+                '5' => Recurrence.Weekdays,
+                '6' => Recurrence.Weekends,
+                '0' => Recurrence.None,
+                _ => task.Recurrence
+            };
 
             manager.Update(task);
             Console.WriteLine("\nTask updated. Press any key to return...");
