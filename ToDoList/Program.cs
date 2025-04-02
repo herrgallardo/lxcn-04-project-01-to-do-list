@@ -8,7 +8,6 @@ using System.Text.Json;
 namespace TodoListApp
 {
     public enum TaskStatus { Pending, InProgress, Done }
-
     public enum Priority { Low, Medium, High, Critical }
 
     public class Task
@@ -23,124 +22,48 @@ namespace TodoListApp
 
     public static class NaturalDateParser
     {
-        // Parses human-friendly date expressions
         public static DateTime Parse(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
-
             input = input.ToLowerInvariant().Trim();
-
             return input switch
             {
                 "today" => DateTime.Today,
                 "tomorrow" => DateTime.Today.AddDays(1),
                 "next week" => DateTime.Today.AddDays(7),
-                _ => TryParseStandardDate(input)
+                _ => DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result) ? result : DateTime.Today
             };
-        }
-
-        private static DateTime TryParseStandardDate(string input)
-        {
-            if (DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
-                return result;
-
-            return DateTime.Today;
         }
     }
 
     public class TaskManager
     {
         private List<Task> _tasks = new();
-
         private static readonly string TasksFilePath = Path.Combine(AppContext.BaseDirectory, "../../../tasks.json");
         private static readonly string BackupFilePath = Path.Combine(AppContext.BaseDirectory, "../../../tasks_backup.json");
 
         public TaskManager() => Load();
 
-        public void Add(Task task)
-        {
-            _tasks.Add(task);
-            Save();
-        }
-
+        public void Add(Task task) { _tasks.Add(task); Save(); }
         public IEnumerable<Task> GetAll() => _tasks;
-
+        public IEnumerable<Task> GetSortedByDate() => _tasks.OrderBy(t => t.DueDate);
+        public IEnumerable<Task> GetSortedByProject() => _tasks.OrderBy(t => t.Project);
         public Task? Find(Guid id) => _tasks.FirstOrDefault(t => t.Id == id);
-
-        public void Update(Task task)
-        {
-            var index = _tasks.FindIndex(t => t.Id == task.Id);
-            if (index >= 0)
-            {
-                _tasks[index] = task;
-                Save();
-            }
-        }
-
-        public void Delete(Guid id)
-        {
-            _tasks = _tasks.Where(t => t.Id != id).ToList();
-            Save();
-        }
+        public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
+        public void Delete(Guid id) { _tasks = _tasks.Where(t => t.Id != id).ToList(); Save(); }
 
         public void Save()
         {
-            if (File.Exists(TasksFilePath))
-            {
-                try
-                {
-                    File.Copy(TasksFilePath, BackupFilePath, true);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Warning: Failed to create backup: {ex.Message}");
-                }
-            }
-
-            try
-            {
-                var json = JsonSerializer.Serialize(_tasks, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(TasksFilePath, json);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error saving tasks: {ex.Message}");
-            }
+            if (File.Exists(TasksFilePath)) File.Copy(TasksFilePath, BackupFilePath, true);
+            var json = JsonSerializer.Serialize(_tasks, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(TasksFilePath, json);
         }
 
         public void Load()
         {
             if (!File.Exists(TasksFilePath)) return;
-
-            try
-            {
-                var json = File.ReadAllText(TasksFilePath);
-                _tasks = JsonSerializer.Deserialize<List<Task>>(json) ?? new List<Task>();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error loading tasks: {ex.Message}");
-
-                if (File.Exists(BackupFilePath))
-                {
-                    try
-                    {
-                        Console.WriteLine("Attempting to recover from backup...");
-                        var backupJson = File.ReadAllText(BackupFilePath);
-                        _tasks = JsonSerializer.Deserialize<List<Task>>(backupJson) ?? new List<Task>();
-                        Console.WriteLine("Recovered from backup.");
-                    }
-                    catch (Exception backupEx)
-                    {
-                        Console.WriteLine($"Error recovering from backup: {backupEx.Message}");
-                        _tasks = new List<Task>();
-                    }
-                }
-                else
-                {
-                    _tasks = new List<Task>();
-                }
-            }
+            try { var json = File.ReadAllText(TasksFilePath); _tasks = JsonSerializer.Deserialize<List<Task>>(json) ?? new List<Task>(); }
+            catch { _tasks = File.Exists(BackupFilePath) ? JsonSerializer.Deserialize<List<Task>>(File.ReadAllText(BackupFilePath)) ?? new List<Task>() : new List<Task>(); }
         }
     }
 
@@ -168,12 +91,7 @@ namespace TodoListApp
 
         public static void ShowTask(Task task)
         {
-            Console.WriteLine($"\nID: {task.Id}");
-            Console.WriteLine($"Title: {task.Title}");
-            Console.WriteLine($"Due: {task.DueDate:yyyy-MM-dd}");
-            Console.WriteLine($"Status: {task.Status}");
-            Console.WriteLine($"Project: {task.Project}");
-            Console.WriteLine($"Priority: {task.Priority}");
+            Console.WriteLine($"\nID: {task.Id}\nTitle: {task.Title}\nDue: {task.DueDate:yyyy-MM-dd}\nStatus: {task.Status}\nProject: {task.Project}\nPriority: {task.Priority}");
         }
 
         public static void ListTasks(IEnumerable<Task> tasks)
@@ -202,44 +120,47 @@ namespace TodoListApp
                 var menuOptions = new Dictionary<string, string>
                 {
                     { "A", "Add Task" },
-                    { "L", "List Tasks" },
+                    { "L", "List All Tasks" },
+                    { "P", "List Tasks by Project" },
+                    { "D", "List Tasks by Due Date" },
                     { "V", "View Task Details" },
                     { "E", "Edit Task" },
                     { "S", "Change Task Status" },
-                    { "D", "Delete Task" },
+                    { "R", "Remove Task" },
                     { "Q", "Quit" }
                 };
 
                 UIHelper.PrintMenu(menuOptions);
-
                 Console.Write("Select an option: ");
                 var input = Console.ReadLine()?.Trim().ToUpper();
 
                 switch (input)
                 {
                     case "A": AddTask(taskManager); break;
-                    case "L":
-                        UIHelper.PrintTitle("All Tasks");
-                        UIHelper.ListTasks(taskManager.GetAll());
-                        Console.WriteLine("\nPress any key to return to menu...");
-                        Console.ReadKey(); break;
+                    case "L": Show(taskManager.GetAll(), "All Tasks"); break;
+                    case "P": Show(taskManager.GetSortedByProject(), "Tasks by Project"); break;
+                    case "D": Show(taskManager.GetSortedByDate(), "Tasks by Due Date"); break;
                     case "V": ViewTask(taskManager); break;
                     case "E": EditTask(taskManager); break;
                     case "S": ChangeStatus(taskManager); break;
-                    case "D": DeleteTask(taskManager); break;
+                    case "R": DeleteTask(taskManager); break;
                     case "Q": exit = true; break;
-                    default:
-                        Console.WriteLine("Invalid option. Press any key to try again...");
-                        Console.ReadKey();
-                        break;
+                    default: Console.WriteLine("Invalid option."); Console.ReadKey(); break;
                 }
             }
+        }
+
+        static void Show(IEnumerable<Task> tasks, string title)
+        {
+            UIHelper.PrintTitle(title);
+            UIHelper.ListTasks(tasks);
+            Console.WriteLine("\nPress any key to return...");
+            Console.ReadKey();
         }
 
         static void AddTask(TaskManager manager)
         {
             UIHelper.PrintTitle("Add New Task");
-
             Console.Write("Title: ");
             var title = Console.ReadLine() ?? "Untitled";
 
@@ -269,7 +190,6 @@ namespace TodoListApp
             };
 
             manager.Add(task);
-
             Console.WriteLine("\nTask added. Press any key to continue...");
             Console.ReadKey();
         }
@@ -284,13 +204,9 @@ namespace TodoListApp
             {
                 var task = manager.Find(id);
                 if (task != null)
-                {
                     UIHelper.ShowTask(task);
-                }
                 else
-                {
                     Console.WriteLine("Task not found.");
-                }
             }
             else
             {
@@ -350,7 +266,6 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
-        // Delete task by ID
         static void DeleteTask(TaskManager manager)
         {
             UIHelper.PrintTitle("Delete Task");
@@ -383,7 +298,6 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
-        // Change task status
         static void ChangeStatus(TaskManager manager)
         {
             UIHelper.PrintTitle("Change Task Status");
