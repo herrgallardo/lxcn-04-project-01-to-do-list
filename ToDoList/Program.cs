@@ -15,11 +15,18 @@ namespace TodoListApp
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty; // New field
         public DateTime DueDate { get; set; }
+        public DateTime CreatedDate { get; set; } = DateTime.Now; // New field
         public TaskStatus Status { get; set; } = TaskStatus.Pending;
         public string Project { get; set; } = string.Empty;
         public Priority Priority { get; set; } = Priority.Medium;
+        public List<string> Tags { get; set; } = new List<string>(); // New field
         public Recurrence Recurrence { get; set; } = Recurrence.None;
+
+        // Computed properties
+        public bool IsOverdue => Status != TaskStatus.Done && DueDate < DateTime.Today;
+        public bool IsDueSoon => Status != TaskStatus.Done && !IsOverdue && DueDate <= DateTime.Today.AddDays(2);
     }
 
     public static class NaturalDateParser
@@ -50,7 +57,11 @@ namespace TodoListApp
         public IEnumerable<Task> GetAll() => _tasks;
         public IEnumerable<Task> GetSortedByDate() => _tasks.OrderBy(t => t.DueDate);
         public IEnumerable<Task> GetSortedByProject() => _tasks.OrderBy(t => t.Project);
-        public IEnumerable<Task> Search(string term) => _tasks.Where(t => t.Title.Contains(term, StringComparison.OrdinalIgnoreCase) || t.Project.Contains(term, StringComparison.OrdinalIgnoreCase));
+        public IEnumerable<Task> Search(string term) => _tasks.Where(t =>
+            t.Title.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+            t.Project.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+            t.Description.Contains(term, StringComparison.OrdinalIgnoreCase) || // Search in description too
+            t.Tags.Any(tag => tag.Contains(term, StringComparison.OrdinalIgnoreCase))); // Search in tags too
         public Task? Find(Guid id) => _tasks.FirstOrDefault(t => t.Id == id);
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
         public void Delete(Guid id) { _tasks = _tasks.Where(t => t.Id != id).ToList(); Save(); }
@@ -77,8 +88,10 @@ namespace TodoListApp
                         var newTask = new Task
                         {
                             Title = task.Title,
+                            Description = task.Description, // Copy description
                             Project = task.Project,
                             Priority = task.Priority,
+                            Tags = new List<string>(task.Tags), // Copy tags
                             Recurrence = task.Recurrence,
                             DueDate = GetNextDueDate(task.DueDate, task.Recurrence),
                             Status = TaskStatus.Pending
@@ -110,16 +123,18 @@ namespace TodoListApp
         {
             var path = Path.Combine(AppContext.BaseDirectory, "../../../tasks_export.csv");
             using var writer = new StreamWriter(path);
-            writer.WriteLine("Id,Title,DueDate,Status,Project,Priority,Recurrence");
+            writer.WriteLine("Id,Title,Description,DueDate,Status,Project,Priority,Tags,Recurrence");
             foreach (var t in _tasks)
             {
                 var line = string.Join(",",
                     t.Id,
                     $"\"{t.Title.Replace("\"", "\"\"")}\"",
+                    $"\"{t.Description.Replace("\"", "\"\"")}\"", // Export description
                     t.DueDate.ToString("yyyy-MM-dd"),
                     t.Status,
                     t.Project,
                     t.Priority,
+                    $"\"{string.Join(";", t.Tags).Replace("\"", "\"\"")}\"", // Export tags
                     t.Recurrence
                 );
                 writer.WriteLine(line);
@@ -153,18 +168,43 @@ namespace TodoListApp
         {
             Console.WriteLine($"\nID: {task.Id}");
             Console.WriteLine($"Title: {task.Title}");
-            Console.WriteLine($"Due: {task.DueDate:yyyy-MM-dd}");
+
+            if (!string.IsNullOrWhiteSpace(task.Description))
+                Console.WriteLine($"Description: {task.Description}");
+
+            Console.WriteLine($"Due Date: {task.DueDate:yyyy-MM-dd}");
             Console.WriteLine($"Status: {task.Status}");
             Console.WriteLine($"Project: {task.Project}");
             Console.WriteLine($"Priority: {task.Priority}");
+
+            if (task.Tags.Count > 0)
+                Console.WriteLine($"Tags: {string.Join(", ", task.Tags)}");
+
             Console.WriteLine($"Recurs: {task.Recurrence}");
+
+            if (task.IsOverdue)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("OVERDUE!");
+                Console.ResetColor();
+            }
+            else if (task.IsDueSoon)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("Due soon!");
+                Console.ResetColor();
+            }
         }
 
         public static void ListTasks(IEnumerable<Task> tasks)
         {
             foreach (var task in tasks)
             {
-                Console.ForegroundColor = task.Status == TaskStatus.Done ? ConsoleColor.Green : ConsoleColor.White;
+                Console.ForegroundColor = task.Status == TaskStatus.Done ? ConsoleColor.Green :
+                                         task.IsOverdue ? ConsoleColor.Red :
+                                         task.IsDueSoon ? ConsoleColor.Yellow :
+                                         ConsoleColor.White;
+
                 Console.WriteLine($"- {task.Title} [{task.Status}] ({task.DueDate:yyyy-MM-dd}) [{task.Recurrence}]");
                 Console.ResetColor();
             }
@@ -233,8 +273,13 @@ namespace TodoListApp
             UIHelper.PrintTitle("Add New Task");
             Console.Write("Title: ");
             var title = Console.ReadLine() ?? "Untitled";
+
+            Console.Write("Description (optional): ");
+            var description = Console.ReadLine() ?? "";
+
             Console.Write("Due Date (e.g. tomorrow, 2024-12-01): ");
             var due = NaturalDateParser.Parse(Console.ReadLine() ?? "");
+
             Console.Write("Project: ");
             var project = Console.ReadLine() ?? "General";
 
@@ -247,6 +292,12 @@ namespace TodoListApp
                 '4' => Priority.Critical,
                 _ => Priority.Medium
             };
+
+            Console.Write("Tags (comma separated, optional): ");
+            var tagsInput = Console.ReadLine() ?? "";
+            var tags = !string.IsNullOrWhiteSpace(tagsInput)
+                ? tagsInput.Split(',').Select(t => t.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
+                : new List<string>();
 
             Console.WriteLine("Recurrence: [0] None, [1] Daily, [2] Weekly, [3] Monthly");
             var recurKey = Console.ReadKey(true).KeyChar;
@@ -261,9 +312,11 @@ namespace TodoListApp
             manager.Add(new Task
             {
                 Title = title,
+                Description = description,
                 DueDate = due,
                 Project = project,
                 Priority = priority,
+                Tags = tags,
                 Recurrence = recurrence
             });
 
@@ -308,15 +361,23 @@ namespace TodoListApp
             var task = manager.Find(id);
             if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
             Console.WriteLine("Leave fields blank to keep existing.");
+
             Console.Write($"Title [{task.Title}]: ");
             var t = Console.ReadLine();
             if (!string.IsNullOrWhiteSpace(t)) task.Title = t;
+
+            Console.Write($"Description [{task.Description}]: ");
+            var desc = Console.ReadLine();
+            if (desc != null) task.Description = desc;
+
             Console.Write($"Due Date [{task.DueDate:yyyy-MM-dd}]: ");
             var d = Console.ReadLine();
             if (!string.IsNullOrWhiteSpace(d)) task.DueDate = NaturalDateParser.Parse(d);
+
             Console.Write($"Project [{task.Project}]: ");
             var p = Console.ReadLine();
             if (!string.IsNullOrWhiteSpace(p)) task.Project = p;
+
             Console.WriteLine($"Priority [{task.Priority}]: [1] Low, [2] Medium, [3] High, [4] Critical");
             var prioKey = Console.ReadKey(true).KeyChar;
             task.Priority = prioKey switch
@@ -326,6 +387,17 @@ namespace TodoListApp
                 '4' => Priority.Critical,
                 _ => task.Priority
             };
+
+            Console.Write($"Tags [{string.Join(", ", task.Tags)}]: ");
+            var tagsInput = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(tagsInput))
+            {
+                task.Tags = tagsInput.Split(',')
+                    .Select(t => t.Trim())
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .ToList();
+            }
+
             manager.Update(task);
             Console.WriteLine("\nTask updated. Press any key to return...");
             Console.ReadKey();
