@@ -48,6 +48,7 @@ namespace TodoListApp
         public IEnumerable<Task> GetAll() => _tasks;
         public IEnumerable<Task> GetSortedByDate() => _tasks.OrderBy(t => t.DueDate);
         public IEnumerable<Task> GetSortedByProject() => _tasks.OrderBy(t => t.Project);
+        public IEnumerable<Task> Search(string term) => _tasks.Where(t => t.Title.Contains(term, StringComparison.OrdinalIgnoreCase) || t.Project.Contains(term, StringComparison.OrdinalIgnoreCase));
         public Task? Find(Guid id) => _tasks.FirstOrDefault(t => t.Id == id);
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
         public void Delete(Guid id) { _tasks = _tasks.Where(t => t.Id != id).ToList(); Save(); }
@@ -123,6 +124,7 @@ namespace TodoListApp
                     { "L", "List All Tasks" },
                     { "P", "List Tasks by Project" },
                     { "D", "List Tasks by Due Date" },
+                    { "F", "Find Task (Search)" },
                     { "V", "View Task Details" },
                     { "E", "Edit Task" },
                     { "S", "Change Task Status" },
@@ -140,6 +142,7 @@ namespace TodoListApp
                     case "L": Show(taskManager.GetAll(), "All Tasks"); break;
                     case "P": Show(taskManager.GetSortedByProject(), "Tasks by Project"); break;
                     case "D": Show(taskManager.GetSortedByDate(), "Tasks by Due Date"); break;
+                    case "F": SearchTasks(taskManager); break;
                     case "V": ViewTask(taskManager); break;
                     case "E": EditTask(taskManager); break;
                     case "S": ChangeStatus(taskManager); break;
@@ -163,14 +166,10 @@ namespace TodoListApp
             UIHelper.PrintTitle("Add New Task");
             Console.Write("Title: ");
             var title = Console.ReadLine() ?? "Untitled";
-
             Console.Write("Due Date (e.g. tomorrow, 2024-12-01): ");
-            var dateInput = Console.ReadLine() ?? "";
-            var due = NaturalDateParser.Parse(dateInput);
-
+            var due = NaturalDateParser.Parse(Console.ReadLine() ?? "");
             Console.Write("Project: ");
             var project = Console.ReadLine() ?? "General";
-
             Console.WriteLine("Priority: [1] Low, [2] Medium, [3] High, [4] Critical");
             var key = Console.ReadKey(true).KeyChar;
             var priority = key switch
@@ -180,39 +179,36 @@ namespace TodoListApp
                 '4' => Priority.Critical,
                 _ => Priority.Medium
             };
-
-            var task = new Task
-            {
-                Title = title,
-                DueDate = due,
-                Project = project,
-                Priority = priority
-            };
-
-            manager.Add(task);
+            manager.Add(new Task { Title = title, DueDate = due, Project = project, Priority = priority });
             Console.WriteLine("\nTask added. Press any key to continue...");
             Console.ReadKey();
+        }
+
+        static void SearchTasks(TaskManager manager)
+        {
+            UIHelper.PrintTitle("Search Tasks");
+            Console.Write("Enter search term: ");
+            var term = Console.ReadLine()?.Trim();
+            if (!string.IsNullOrWhiteSpace(term))
+                Show(manager.Search(term), $"Search Results for '{term}'");
+            else
+            {
+                Console.WriteLine("Invalid input.");
+                Console.ReadKey();
+            }
         }
 
         static void ViewTask(TaskManager manager)
         {
             UIHelper.PrintTitle("View Task Details");
             Console.Write("Enter task ID: ");
-            var idInput = Console.ReadLine();
-
-            if (Guid.TryParse(idInput, out var id))
+            if (Guid.TryParse(Console.ReadLine(), out var id))
             {
                 var task = manager.Find(id);
-                if (task != null)
-                    UIHelper.ShowTask(task);
-                else
-                    Console.WriteLine("Task not found.");
+                if (task != null) UIHelper.ShowTask(task);
+                else Console.WriteLine("Task not found.");
             }
-            else
-            {
-                Console.WriteLine("Invalid ID format.");
-            }
-
+            else Console.WriteLine("Invalid ID format.");
             Console.WriteLine("\nPress any key to return...");
             Console.ReadKey();
         }
@@ -221,80 +217,30 @@ namespace TodoListApp
         {
             UIHelper.PrintTitle("Edit Task");
             Console.Write("Enter task ID: ");
-            var idInput = Console.ReadLine();
-
-            if (!Guid.TryParse(idInput, out var id))
-            {
-                Console.WriteLine("Invalid ID format.");
-                Console.ReadKey();
-                return;
-            }
-
+            if (!Guid.TryParse(Console.ReadLine(), out var id)) { Console.WriteLine("Invalid ID."); Console.ReadKey(); return; }
             var task = manager.Find(id);
-            if (task == null)
-            {
-                Console.WriteLine("Task not found.");
-                Console.ReadKey();
-                return;
-            }
-
-            Console.WriteLine("Leave fields blank to keep existing values.");
+            if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
+            Console.WriteLine("Leave fields blank to keep existing.");
             Console.Write($"Title [{task.Title}]: ");
-            var newTitle = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(newTitle)) task.Title = newTitle;
-
+            var t = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(t)) task.Title = t;
             Console.Write($"Due Date [{task.DueDate:yyyy-MM-dd}]: ");
-            var dueInput = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(dueInput)) task.DueDate = NaturalDateParser.Parse(dueInput);
-
+            var d = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(d)) task.DueDate = NaturalDateParser.Parse(d);
             Console.Write($"Project [{task.Project}]: ");
-            var newProject = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(newProject)) task.Project = newProject;
-
+            var p = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(p)) task.Project = p;
             Console.WriteLine($"Priority [{task.Priority}]: [1] Low, [2] Medium, [3] High, [4] Critical");
-            var priorityKey = Console.ReadKey(true).KeyChar;
-            task.Priority = priorityKey switch
+            var prioKey = Console.ReadKey(true).KeyChar;
+            task.Priority = prioKey switch
             {
                 '1' => Priority.Low,
                 '3' => Priority.High,
                 '4' => Priority.Critical,
                 _ => task.Priority
             };
-
             manager.Update(task);
             Console.WriteLine("\nTask updated. Press any key to return...");
-            Console.ReadKey();
-        }
-
-        static void DeleteTask(TaskManager manager)
-        {
-            UIHelper.PrintTitle("Delete Task");
-            Console.Write("Enter task ID to delete: ");
-            var idInput = Console.ReadLine();
-
-            if (Guid.TryParse(idInput, out var id))
-            {
-                var task = manager.Find(id);
-                if (task != null)
-                {
-                    UIHelper.ShowTask(task);
-                    Console.Write("Are you sure you want to delete this task? (y/n): ");
-                    var confirm = Console.ReadLine()?.Trim().ToLower();
-                    if (confirm == "y")
-                    {
-                        manager.Delete(id);
-                        Console.WriteLine("Task deleted.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Delete cancelled.");
-                    }
-                }
-                else Console.WriteLine("Task not found.");
-            }
-            else Console.WriteLine("Invalid ID format.");
-
-            Console.WriteLine("\nPress any key to return...");
             Console.ReadKey();
         }
 
@@ -302,27 +248,12 @@ namespace TodoListApp
         {
             UIHelper.PrintTitle("Change Task Status");
             Console.Write("Enter task ID: ");
-            var idInput = Console.ReadLine();
-
-            if (!Guid.TryParse(idInput, out var id))
-            {
-                Console.WriteLine("Invalid ID format.");
-                Console.ReadKey();
-                return;
-            }
-
+            if (!Guid.TryParse(Console.ReadLine(), out var id)) { Console.WriteLine("Invalid ID."); Console.ReadKey(); return; }
             var task = manager.Find(id);
-            if (task == null)
-            {
-                Console.WriteLine("Task not found.");
-                Console.ReadKey();
-                return;
-            }
-
+            if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
             Console.WriteLine($"Current Status: {task.Status}");
             Console.WriteLine("[1] Pending, [2] In Progress, [3] Done");
             var statusKey = Console.ReadKey(true).KeyChar;
-
             task.Status = statusKey switch
             {
                 '1' => TaskStatus.Pending,
@@ -330,9 +261,23 @@ namespace TodoListApp
                 '3' => TaskStatus.Done,
                 _ => task.Status
             };
-
             manager.Update(task);
-            Console.WriteLine("\nTask status updated. Press any key to continue...");
+            Console.WriteLine("\nStatus updated. Press any key to continue...");
+            Console.ReadKey();
+        }
+
+        static void DeleteTask(TaskManager manager)
+        {
+            UIHelper.PrintTitle("Delete Task");
+            Console.Write("Enter task ID: ");
+            if (!Guid.TryParse(Console.ReadLine(), out var id)) { Console.WriteLine("Invalid ID."); Console.ReadKey(); return; }
+            var task = manager.Find(id);
+            if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
+            UIHelper.ShowTask(task);
+            Console.Write("Confirm delete? (y/n): ");
+            if ((Console.ReadLine() ?? "n").Trim().ToLower() == "y") { manager.Delete(id); Console.WriteLine("Deleted."); }
+            else Console.WriteLine("Cancelled.");
+            Console.WriteLine("\nPress any key to continue...");
             Console.ReadKey();
         }
     }
