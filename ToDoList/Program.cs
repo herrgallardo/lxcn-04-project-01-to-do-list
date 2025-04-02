@@ -70,7 +70,6 @@ namespace TodoListApp
                 var json = File.ReadAllText(TasksFilePath);
                 _tasks = JsonSerializer.Deserialize<List<Task>>(json) ?? new List<Task>();
 
-                // Handle recurrence: regenerate due dates for recurring tasks
                 foreach (var task in _tasks.ToList())
                 {
                     if (task.Status == TaskStatus.Done && task.Recurrence != Recurrence.None)
@@ -106,6 +105,26 @@ namespace TodoListApp
             Recurrence.Monthly => current.AddMonths(1),
             _ => current
         };
+
+        public void ExportToCsv()
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "../../../tasks_export.csv");
+            using var writer = new StreamWriter(path);
+            writer.WriteLine("Id,Title,DueDate,Status,Project,Priority,Recurrence");
+            foreach (var t in _tasks)
+            {
+                var line = string.Join(",",
+                    t.Id,
+                    $"\"{t.Title.Replace("\"", "\"\"")}\"",
+                    t.DueDate.ToString("yyyy-MM-dd"),
+                    t.Status,
+                    t.Project,
+                    t.Priority,
+                    t.Recurrence
+                );
+                writer.WriteLine(line);
+            }
+        }
     }
 
     public static class UIHelper
@@ -175,6 +194,7 @@ namespace TodoListApp
                     { "E", "Edit Task" },
                     { "S", "Change Task Status" },
                     { "R", "Remove Task" },
+                    { "X", "Export Tasks to CSV" },
                     { "Q", "Quit" }
                 };
 
@@ -193,6 +213,7 @@ namespace TodoListApp
                     case "E": EditTask(taskManager); break;
                     case "S": ChangeStatus(taskManager); break;
                     case "R": DeleteTask(taskManager); break;
+                    case "X": taskManager.ExportToCsv(); Console.WriteLine("\nExported. Press any key..."); Console.ReadKey(); break;
                     case "Q": exit = true; break;
                     default: Console.WriteLine("Invalid option."); Console.ReadKey(); break;
                 }
