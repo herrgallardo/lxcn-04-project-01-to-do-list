@@ -23,6 +23,7 @@ namespace TodoListApp
 
     public static class NaturalDateParser
     {
+        // Parses human-friendly date expressions
         public static DateTime Parse(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
@@ -41,9 +42,7 @@ namespace TodoListApp
         private static DateTime TryParseStandardDate(string input)
         {
             if (DateTime.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
-            {
                 return result;
-            }
 
             return DateTime.Today;
         }
@@ -206,6 +205,8 @@ namespace TodoListApp
                     { "L", "List Tasks" },
                     { "V", "View Task Details" },
                     { "E", "Edit Task" },
+                    { "S", "Change Task Status" },
+                    { "D", "Delete Task" },
                     { "Q", "Quit" }
                 };
 
@@ -224,6 +225,8 @@ namespace TodoListApp
                         Console.ReadKey(); break;
                     case "V": ViewTask(taskManager); break;
                     case "E": EditTask(taskManager); break;
+                    case "S": ChangeStatus(taskManager); break;
+                    case "D": DeleteTask(taskManager); break;
                     case "Q": exit = true; break;
                     default:
                         Console.WriteLine("Invalid option. Press any key to try again...");
@@ -233,7 +236,6 @@ namespace TodoListApp
             }
         }
 
-        // Add task with user input
         static void AddTask(TaskManager manager)
         {
             UIHelper.PrintTitle("Add New Task");
@@ -272,7 +274,6 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
-        // View task by ID
         static void ViewTask(TaskManager manager)
         {
             UIHelper.PrintTitle("View Task Details");
@@ -300,7 +301,6 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
-        // Edit task by ID with optional fields
         static void EditTask(TaskManager manager)
         {
             UIHelper.PrintTitle("Edit Task");
@@ -347,6 +347,78 @@ namespace TodoListApp
 
             manager.Update(task);
             Console.WriteLine("\nTask updated. Press any key to return...");
+            Console.ReadKey();
+        }
+
+        // Delete task by ID
+        static void DeleteTask(TaskManager manager)
+        {
+            UIHelper.PrintTitle("Delete Task");
+            Console.Write("Enter task ID to delete: ");
+            var idInput = Console.ReadLine();
+
+            if (Guid.TryParse(idInput, out var id))
+            {
+                var task = manager.Find(id);
+                if (task != null)
+                {
+                    UIHelper.ShowTask(task);
+                    Console.Write("Are you sure you want to delete this task? (y/n): ");
+                    var confirm = Console.ReadLine()?.Trim().ToLower();
+                    if (confirm == "y")
+                    {
+                        manager.Delete(id);
+                        Console.WriteLine("Task deleted.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Delete cancelled.");
+                    }
+                }
+                else Console.WriteLine("Task not found.");
+            }
+            else Console.WriteLine("Invalid ID format.");
+
+            Console.WriteLine("\nPress any key to return...");
+            Console.ReadKey();
+        }
+
+        // Change task status
+        static void ChangeStatus(TaskManager manager)
+        {
+            UIHelper.PrintTitle("Change Task Status");
+            Console.Write("Enter task ID: ");
+            var idInput = Console.ReadLine();
+
+            if (!Guid.TryParse(idInput, out var id))
+            {
+                Console.WriteLine("Invalid ID format.");
+                Console.ReadKey();
+                return;
+            }
+
+            var task = manager.Find(id);
+            if (task == null)
+            {
+                Console.WriteLine("Task not found.");
+                Console.ReadKey();
+                return;
+            }
+
+            Console.WriteLine($"Current Status: {task.Status}");
+            Console.WriteLine("[1] Pending, [2] In Progress, [3] Done");
+            var statusKey = Console.ReadKey(true).KeyChar;
+
+            task.Status = statusKey switch
+            {
+                '1' => TaskStatus.Pending,
+                '2' => TaskStatus.InProgress,
+                '3' => TaskStatus.Done,
+                _ => task.Status
+            };
+
+            manager.Update(task);
+            Console.WriteLine("\nTask status updated. Press any key to continue...");
             Console.ReadKey();
         }
     }
