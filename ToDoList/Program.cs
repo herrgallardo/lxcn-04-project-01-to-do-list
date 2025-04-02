@@ -23,6 +23,7 @@ namespace TodoListApp
 
     public static class NaturalDateParser
     {
+        // Parses friendly date strings like "today", "tomorrow", etc.
         public static DateTime Parse(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
@@ -57,7 +58,6 @@ namespace TodoListApp
         private static readonly string BackupFilePath = Path.Combine(AppContext.BaseDirectory, "../../../tasks_backup.json");
 
         public TaskManager() => Load();
-
 
         public void Add(Task task)
         {
@@ -146,6 +146,53 @@ namespace TodoListApp
         }
     }
 
+    public static class UIHelper
+    {
+        // Prints a banner title
+        public static void PrintTitle(string title)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("\n" + new string('=', 40));
+            Console.WriteLine(title);
+            Console.WriteLine(new string('=', 40));
+            Console.ResetColor();
+        }
+
+        // Prints a menu with keys and descriptions
+        public static void PrintMenu(Dictionary<string, string> options)
+        {
+            foreach (var opt in options)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write($"[{opt.Key}] ");
+                Console.ResetColor();
+                Console.WriteLine(opt.Value);
+            }
+        }
+
+        // Displays task details
+        public static void ShowTask(Task task)
+        {
+            Console.WriteLine($"\nID: {task.Id}");
+            Console.WriteLine($"Title: {task.Title}");
+            Console.WriteLine($"Due: {task.DueDate:yyyy-MM-dd}");
+            Console.WriteLine($"Status: {task.Status}");
+            Console.WriteLine($"Project: {task.Project}");
+            Console.WriteLine($"Priority: {task.Priority}");
+        }
+
+        // Lists all tasks
+        public static void ListTasks(IEnumerable<Task> tasks)
+        {
+            foreach (var task in tasks)
+            {
+                Console.ForegroundColor = task.Status == TaskStatus.Done ? ConsoleColor.Green : ConsoleColor.White;
+                Console.WriteLine($"- {task.Title} [{task.Status}] ({task.DueDate:yyyy-MM-dd})");
+                Console.ResetColor();
+            }
+        }
+    }
+
     class Program
     {
         static void Main(string[] args)
@@ -164,11 +211,8 @@ namespace TodoListApp
 
             taskManager.Add(newTask);
 
-            Console.WriteLine("Tasks:");
-            foreach (var task in taskManager.GetAll())
-            {
-                Console.WriteLine($"- {task.Title} due {task.DueDate:yyyy-MM-dd}");
-            }
+            UIHelper.PrintTitle("All Tasks");
+            UIHelper.ListTasks(taskManager.GetAll());
         }
     }
 }
