@@ -31,7 +31,6 @@ namespace TodoListApp
 
     public static class NaturalDateParser
     {
-        // Enhanced date parser with more human-friendly formats
         public static DateTime Parse(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
@@ -62,7 +61,6 @@ namespace TodoListApp
             };
         }
 
-        // Calculates the date of the next occurrence of the specified day of week
         private static DateTime GetNextWeekday(DayOfWeek dayOfWeek)
         {
             DateTime date = DateTime.Today;
@@ -71,7 +69,6 @@ namespace TodoListApp
             return date.AddDays(daysToAdd);
         }
 
-        // Returns the date of the upcoming Sunday (end of the current week)
         private static DateTime GetEndOfWeek()
         {
             DateTime date = DateTime.Today;
@@ -79,14 +76,12 @@ namespace TodoListApp
             return date.AddDays(daysToAdd);
         }
 
-        // Returns the last day of the current month
         private static DateTime GetEndOfMonth()
         {
             DateTime date = DateTime.Today;
             return new DateTime(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month));
         }
 
-        // Handles expressions like "next monday", "next month", etc.
         private static DateTime ParseNextOccurrence(string occurrence)
         {
             return occurrence switch
@@ -105,7 +100,6 @@ namespace TodoListApp
             };
         }
 
-        // Handles expressions like "in 3 days", "in 2 weeks", etc.
         private static DateTime ParseRelativeDate(string relativeInput)
         {
             var parts = relativeInput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -121,7 +115,6 @@ namespace TodoListApp
             };
         }
 
-        // Attempts to parse date strings in various standard formats
         private static DateTime TryParseStandardDate(string input)
         {
             string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "d-MMM", "d-MMM-yyyy", "d MMM", "d MMM yyyy" };
@@ -139,6 +132,7 @@ namespace TodoListApp
     public class TaskManager
     {
         private List<Task> _tasks = new();
+        private List<Task> _deletedTasks = new(); // For undo functionality
         private static readonly string TasksFilePath = Path.Combine(AppContext.BaseDirectory, "../../../tasks.json");
         private static readonly string BackupFilePath = Path.Combine(AppContext.BaseDirectory, "../../../tasks_backup.json");
 
@@ -155,7 +149,68 @@ namespace TodoListApp
             t.Tags.Any(tag => tag.Contains(term, StringComparison.OrdinalIgnoreCase)));
         public Task? Find(Guid id) => _tasks.FirstOrDefault(t => t.Id == id);
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
-        public void Delete(Guid id) { _tasks = _tasks.Where(t => t.Id != id).ToList(); Save(); }
+
+        // Enhanced delete with undo functionality
+        public bool Delete(Guid id)
+        {
+            var task = _tasks.FirstOrDefault(t => t.Id == id);
+            if (task == null) return false;
+
+            _tasks.Remove(task);
+            _deletedTasks.Add(task); // Store for undo
+
+            Save();
+            return true;
+        }
+
+        // Restores the most recently deleted task
+        public bool UndoDelete()
+        {
+            if (_deletedTasks.Count == 0) return false;
+
+            var task = _deletedTasks[^1]; // Get the last deleted task
+            _deletedTasks.RemoveAt(_deletedTasks.Count - 1);
+            _tasks.Add(task);
+
+            Save();
+            return true;
+        }
+
+        // Bulk operations
+        public bool BulkDelete(List<Guid> ids)
+        {
+            bool anyDeleted = false;
+            foreach (var id in ids)
+            {
+                var task = _tasks.FirstOrDefault(t => t.Id == id);
+                if (task != null)
+                {
+                    _tasks.Remove(task);
+                    _deletedTasks.Add(task);
+                    anyDeleted = true;
+                }
+            }
+
+            if (anyDeleted) Save();
+            return anyDeleted;
+        }
+
+        public bool BulkUpdateStatus(List<Guid> ids, TaskStatus status)
+        {
+            bool anyUpdated = false;
+            foreach (var id in ids)
+            {
+                var task = _tasks.FirstOrDefault(t => t.Id == id);
+                if (task != null)
+                {
+                    task.Status = status;
+                    anyUpdated = true;
+                }
+            }
+
+            if (anyUpdated) Save();
+            return anyUpdated;
+        }
 
         public IEnumerable<string> GetAllProjects()
         {
@@ -246,7 +301,6 @@ namespace TodoListApp
             _ => current
         };
 
-        // Helper method to get the next weekday (Monday-Friday) from a given date
         private DateTime GetNextWeekday(DateTime date)
         {
             date = date.AddDays(1);
@@ -257,7 +311,6 @@ namespace TodoListApp
             return date;
         }
 
-        // Helper method to get the next weekend day (Saturday or Sunday) from a given date
         private DateTime GetNextWeekend(DateTime date)
         {
             date = date.AddDays(1);
@@ -437,6 +490,8 @@ namespace TodoListApp
                     { "E", "Edit Task" },
                     { "S", "Change Task Status" },
                     { "R", "Remove Task" },
+                    { "B", "Bulk Operations" }, // New option
+                    { "U", "Undo Delete" }, // New option
                     { "T", "Statistics" },
                     { "X", "Export Tasks to CSV" },
                     { "Q", "Quit" }
@@ -457,12 +512,126 @@ namespace TodoListApp
                     case "E": EditTask(taskManager); break;
                     case "S": ChangeStatus(taskManager); break;
                     case "R": DeleteTask(taskManager); break;
+                    case "B": BulkOperations(taskManager); break; // New case
+                    case "U": UndoDelete(taskManager); break; // New case
                     case "T": ShowStatistics(taskManager); break;
                     case "X": taskManager.ExportToCsv(); Console.WriteLine("\nExported. Press any key..."); Console.ReadKey(); break;
                     case "Q": exit = true; break;
                     default: Console.WriteLine("Invalid option."); Console.ReadKey(); break;
                 }
             }
+        }
+
+        // New method for bulk operations
+        static void BulkOperations(TaskManager manager)
+        {
+            UIHelper.PrintMenu(new Dictionary<string, string>
+            {
+                { "M", "Mark Multiple Tasks as Done" },
+                { "P", "Mark Multiple Tasks as In Progress" },
+                { "D", "Delete Multiple Tasks" }
+            });
+
+            Console.Write("Select an operation: ");
+            var key = Console.ReadKey(true).Key;
+            Console.WriteLine();
+
+            if (key != ConsoleKey.M && key != ConsoleKey.P && key != ConsoleKey.D)
+            {
+                return;
+            }
+
+            Console.WriteLine("Enter task IDs separated by commas:");
+            var idInput = Console.ReadLine() ?? string.Empty;
+            var idStrings = idInput.Split(',').Select(s => s.Trim());
+
+            var ids = new List<Guid>();
+            foreach (var idStr in idStrings)
+            {
+                if (Guid.TryParse(idStr, out var id))
+                {
+                    ids.Add(id);
+                }
+                else
+                {
+                    Console.WriteLine($"Invalid ID format: {idStr}");
+                }
+            }
+
+            if (ids.Count == 0)
+            {
+                Console.WriteLine("No valid IDs provided.");
+                Console.ReadKey(true);
+                return;
+            }
+
+            bool success = false;
+            string operationName = "";
+
+            switch (key)
+            {
+                case ConsoleKey.M:
+                    success = manager.BulkUpdateStatus(ids, TaskStatus.Done);
+                    operationName = "marked as done";
+                    break;
+                case ConsoleKey.P:
+                    success = manager.BulkUpdateStatus(ids, TaskStatus.InProgress);
+                    operationName = "marked as in progress";
+                    break;
+                case ConsoleKey.D:
+                    Console.Write($"Are you sure you want to delete {ids.Count} tasks? (y/n): ");
+                    if (Console.ReadKey().KeyChar.ToString().ToLower() == "y")
+                    {
+                        Console.WriteLine();
+                        success = manager.BulkDelete(ids);
+                        operationName = "deleted";
+                    }
+                    else
+                    {
+                        Console.WriteLine("\nOperation cancelled.");
+                        Console.ReadKey(true);
+                        return;
+                    }
+                    break;
+            }
+
+            if (success)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"\n✅ {ids.Count} tasks {operationName} successfully!");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("\n❌ Failed to perform operation.");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine("Press any key to continue...");
+            Console.ReadKey();
+        }
+
+        // New method for undo delete
+        static void UndoDelete(TaskManager manager)
+        {
+            var success = manager.UndoDelete();
+
+            if (success)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("✅ Last deleted task restored successfully!");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("No recently deleted tasks to restore.");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine("Press any key to continue...");
+            Console.ReadKey();
         }
 
         static void ShowStatistics(TaskManager manager)
@@ -692,8 +861,11 @@ namespace TodoListApp
             Console.Write("Confirm delete? (y/n): ");
             if ((Console.ReadLine() ?? "n").Trim().ToLower() == "y")
             {
-                manager.Delete(id);
-                Console.WriteLine("Deleted.");
+                var deleted = manager.Delete(id);
+                if (deleted)
+                    Console.WriteLine("Deleted. You can use 'U' option to undo if needed.");
+                else
+                    Console.WriteLine("Failed to delete task.");
             }
             else Console.WriteLine("Cancelled.");
             Console.WriteLine("\nPress any key to continue...");
