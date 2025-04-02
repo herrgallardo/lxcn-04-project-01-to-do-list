@@ -66,6 +66,42 @@ namespace TodoListApp
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
         public void Delete(Guid id) { _tasks = _tasks.Where(t => t.Id != id).ToList(); Save(); }
 
+        // Get a list of all unique project names
+        public IEnumerable<string> GetAllProjects()
+        {
+            return _tasks.Select(t => t.Project)
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Distinct()
+                        .OrderBy(p => p);
+        }
+
+        // Get a list of all unique tags
+        public IEnumerable<string> GetAllTags()
+        {
+            return _tasks.SelectMany(t => t.Tags)
+                        .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                        .Distinct()
+                        .OrderBy(t => t);
+        }
+
+        // New method to get task statistics
+        public Dictionary<string, int> GetTaskStatistics()
+        {
+            return new Dictionary<string, int>
+            {
+                { "Total", _tasks.Count },
+                { "Pending", _tasks.Count(t => t.Status == TaskStatus.Pending) },
+                { "In Progress", _tasks.Count(t => t.Status == TaskStatus.InProgress) },
+                { "Completed", _tasks.Count(t => t.Status == TaskStatus.Done) },
+                { "Overdue", _tasks.Count(t => t.IsOverdue) },
+                { "Due Today", _tasks.Count(t => t.Status != TaskStatus.Done && t.DueDate.Date == DateTime.Today) },
+                { "Due This Week", _tasks.Count(t => t.Status != TaskStatus.Done &&
+                                                    t.DueDate.Date >= DateTime.Today &&
+                                                    t.DueDate.Date <= DateTime.Today.AddDays(7)) },
+                { "High Priority", _tasks.Count(t => t.Priority == Priority.High || t.Priority == Priority.Critical) }
+            };
+        }
+
         public void Save()
         {
             if (File.Exists(TasksFilePath)) File.Copy(TasksFilePath, BackupFilePath, true);
@@ -164,7 +200,6 @@ namespace TodoListApp
             }
         }
 
-        // New method to determine task color based on its properties
         public static ConsoleColor GetTaskColor(Task task)
         {
             return task.Status == TaskStatus.Done ? ConsoleColor.Green :
@@ -244,7 +279,23 @@ namespace TodoListApp
             }
         }
 
-        // Helper method to truncate long strings for display
+        // New method to display statistics
+        public static void DisplayStatistics(Dictionary<string, int> stats)
+        {
+            PrintTitle("Task Statistics");
+
+            foreach (var stat in stats)
+            {
+                Console.Write($"{stat.Key}: ");
+                Console.ForegroundColor = stat.Key.Contains("Overdue") ? ConsoleColor.Red :
+                                         stat.Key.Contains("Completed") ? ConsoleColor.Green :
+                                         stat.Key.Contains("High Priority") ? ConsoleColor.Yellow :
+                                         ConsoleColor.White;
+                Console.WriteLine(stat.Value);
+                Console.ResetColor();
+            }
+        }
+
         public static string TruncateString(string str, int maxLength)
         {
             return str.Length <= maxLength ? str : str.Substring(0, maxLength - 3) + "...";
@@ -274,6 +325,7 @@ namespace TodoListApp
                     { "E", "Edit Task" },
                     { "S", "Change Task Status" },
                     { "R", "Remove Task" },
+                    { "T", "Statistics" }, // New option
                     { "X", "Export Tasks to CSV" },
                     { "Q", "Quit" }
                 };
@@ -293,11 +345,47 @@ namespace TodoListApp
                     case "E": EditTask(taskManager); break;
                     case "S": ChangeStatus(taskManager); break;
                     case "R": DeleteTask(taskManager); break;
+                    case "T": ShowStatistics(taskManager); break; // New case
                     case "X": taskManager.ExportToCsv(); Console.WriteLine("\nExported. Press any key..."); Console.ReadKey(); break;
                     case "Q": exit = true; break;
                     default: Console.WriteLine("Invalid option."); Console.ReadKey(); break;
                 }
             }
+        }
+
+        // New method to display statistics
+        static void ShowStatistics(TaskManager manager)
+        {
+            var stats = manager.GetTaskStatistics();
+            UIHelper.DisplayStatistics(stats);
+
+            // Also show projects breakdown
+            Console.WriteLine("\n--- Projects Breakdown ---");
+            var allProjects = manager.GetAllProjects().ToList();
+            foreach (var project in allProjects)
+            {
+                var projectTasks = manager.GetAll().Where(t => t.Project == project).ToList();
+                var completedCount = projectTasks.Count(t => t.Status == TaskStatus.Done);
+                var pendingCount = projectTasks.Count(t => t.Status == TaskStatus.Pending);
+                var inProgressCount = projectTasks.Count(t => t.Status == TaskStatus.InProgress);
+
+                Console.WriteLine($"{project} ({projectTasks.Count} tasks):");
+                Console.Write($"  Completed: ");
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write($"{completedCount}");
+                Console.ResetColor();
+                Console.Write($" | In Progress: ");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write($"{inProgressCount}");
+                Console.ResetColor();
+                Console.Write($" | Pending: ");
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"{pendingCount}");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine("\nPress any key to continue...");
+            Console.ReadKey();
         }
 
         static void Show(IEnumerable<Task> tasks, string title)
