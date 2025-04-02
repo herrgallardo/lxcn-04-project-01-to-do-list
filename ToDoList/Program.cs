@@ -204,6 +204,8 @@ namespace TodoListApp
                 {
                     { "A", "Add Task" },
                     { "L", "List Tasks" },
+                    { "V", "View Task Details" },
+                    { "E", "Edit Task" },
                     { "Q", "Quit" }
                 };
 
@@ -214,18 +216,15 @@ namespace TodoListApp
 
                 switch (input)
                 {
-                    case "A":
-                        AddTask(taskManager);
-                        break;
+                    case "A": AddTask(taskManager); break;
                     case "L":
                         UIHelper.PrintTitle("All Tasks");
                         UIHelper.ListTasks(taskManager.GetAll());
                         Console.WriteLine("\nPress any key to return to menu...");
-                        Console.ReadKey();
-                        break;
-                    case "Q":
-                        exit = true;
-                        break;
+                        Console.ReadKey(); break;
+                    case "V": ViewTask(taskManager); break;
+                    case "E": EditTask(taskManager); break;
+                    case "Q": exit = true; break;
                     default:
                         Console.WriteLine("Invalid option. Press any key to try again...");
                         Console.ReadKey();
@@ -234,6 +233,7 @@ namespace TodoListApp
             }
         }
 
+        // Add task with user input
         static void AddTask(TaskManager manager)
         {
             UIHelper.PrintTitle("Add New Task");
@@ -269,6 +269,84 @@ namespace TodoListApp
             manager.Add(task);
 
             Console.WriteLine("\nTask added. Press any key to continue...");
+            Console.ReadKey();
+        }
+
+        // View task by ID
+        static void ViewTask(TaskManager manager)
+        {
+            UIHelper.PrintTitle("View Task Details");
+            Console.Write("Enter task ID: ");
+            var idInput = Console.ReadLine();
+
+            if (Guid.TryParse(idInput, out var id))
+            {
+                var task = manager.Find(id);
+                if (task != null)
+                {
+                    UIHelper.ShowTask(task);
+                }
+                else
+                {
+                    Console.WriteLine("Task not found.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Invalid ID format.");
+            }
+
+            Console.WriteLine("\nPress any key to return...");
+            Console.ReadKey();
+        }
+
+        // Edit task by ID with optional fields
+        static void EditTask(TaskManager manager)
+        {
+            UIHelper.PrintTitle("Edit Task");
+            Console.Write("Enter task ID: ");
+            var idInput = Console.ReadLine();
+
+            if (!Guid.TryParse(idInput, out var id))
+            {
+                Console.WriteLine("Invalid ID format.");
+                Console.ReadKey();
+                return;
+            }
+
+            var task = manager.Find(id);
+            if (task == null)
+            {
+                Console.WriteLine("Task not found.");
+                Console.ReadKey();
+                return;
+            }
+
+            Console.WriteLine("Leave fields blank to keep existing values.");
+            Console.Write($"Title [{task.Title}]: ");
+            var newTitle = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(newTitle)) task.Title = newTitle;
+
+            Console.Write($"Due Date [{task.DueDate:yyyy-MM-dd}]: ");
+            var dueInput = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(dueInput)) task.DueDate = NaturalDateParser.Parse(dueInput);
+
+            Console.Write($"Project [{task.Project}]: ");
+            var newProject = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(newProject)) task.Project = newProject;
+
+            Console.WriteLine($"Priority [{task.Priority}]: [1] Low, [2] Medium, [3] High, [4] Critical");
+            var priorityKey = Console.ReadKey(true).KeyChar;
+            task.Priority = priorityKey switch
+            {
+                '1' => Priority.Low,
+                '3' => Priority.High,
+                '4' => Priority.Critical,
+                _ => task.Priority
+            };
+
+            manager.Update(task);
+            Console.WriteLine("\nTask updated. Press any key to return...");
             Console.ReadKey();
         }
     }
