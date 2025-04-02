@@ -23,7 +23,6 @@ namespace TodoListApp
 
     public static class NaturalDateParser
     {
-        // Parses friendly date strings like "today", "tomorrow", etc.
         public static DateTime Parse(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
@@ -148,7 +147,6 @@ namespace TodoListApp
 
     public static class UIHelper
     {
-        // Prints a banner title
         public static void PrintTitle(string title)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -158,7 +156,6 @@ namespace TodoListApp
             Console.ResetColor();
         }
 
-        // Prints a menu with keys and descriptions
         public static void PrintMenu(Dictionary<string, string> options)
         {
             foreach (var opt in options)
@@ -170,7 +167,6 @@ namespace TodoListApp
             }
         }
 
-        // Displays task details
         public static void ShowTask(Task task)
         {
             Console.WriteLine($"\nID: {task.Id}");
@@ -181,7 +177,6 @@ namespace TodoListApp
             Console.WriteLine($"Priority: {task.Priority}");
         }
 
-        // Lists all tasks
         public static void ListTasks(IEnumerable<Task> tasks)
         {
             foreach (var task in tasks)
@@ -197,22 +192,84 @@ namespace TodoListApp
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Welcome to Todo List!");
-
             var taskManager = new TaskManager();
+            bool exit = false;
 
-            var newTask = new Task
+            while (!exit)
             {
-                Title = "Sample Task",
-                DueDate = NaturalDateParser.Parse("tomorrow"),
-                Project = "General",
-                Priority = Priority.High
+                Console.Clear();
+                UIHelper.PrintTitle("Todo List Menu");
+
+                var menuOptions = new Dictionary<string, string>
+                {
+                    { "A", "Add Task" },
+                    { "L", "List Tasks" },
+                    { "Q", "Quit" }
+                };
+
+                UIHelper.PrintMenu(menuOptions);
+
+                Console.Write("Select an option: ");
+                var input = Console.ReadLine()?.Trim().ToUpper();
+
+                switch (input)
+                {
+                    case "A":
+                        AddTask(taskManager);
+                        break;
+                    case "L":
+                        UIHelper.PrintTitle("All Tasks");
+                        UIHelper.ListTasks(taskManager.GetAll());
+                        Console.WriteLine("\nPress any key to return to menu...");
+                        Console.ReadKey();
+                        break;
+                    case "Q":
+                        exit = true;
+                        break;
+                    default:
+                        Console.WriteLine("Invalid option. Press any key to try again...");
+                        Console.ReadKey();
+                        break;
+                }
+            }
+        }
+
+        static void AddTask(TaskManager manager)
+        {
+            UIHelper.PrintTitle("Add New Task");
+
+            Console.Write("Title: ");
+            var title = Console.ReadLine() ?? "Untitled";
+
+            Console.Write("Due Date (e.g. tomorrow, 2024-12-01): ");
+            var dateInput = Console.ReadLine() ?? "";
+            var due = NaturalDateParser.Parse(dateInput);
+
+            Console.Write("Project: ");
+            var project = Console.ReadLine() ?? "General";
+
+            Console.WriteLine("Priority: [1] Low, [2] Medium, [3] High, [4] Critical");
+            var key = Console.ReadKey(true).KeyChar;
+            var priority = key switch
+            {
+                '1' => Priority.Low,
+                '3' => Priority.High,
+                '4' => Priority.Critical,
+                _ => Priority.Medium
             };
 
-            taskManager.Add(newTask);
+            var task = new Task
+            {
+                Title = title,
+                DueDate = due,
+                Project = project,
+                Priority = priority
+            };
 
-            UIHelper.PrintTitle("All Tasks");
-            UIHelper.ListTasks(taskManager.GetAll());
+            manager.Add(task);
+
+            Console.WriteLine("\nTask added. Press any key to continue...");
+            Console.ReadKey();
         }
     }
 }
