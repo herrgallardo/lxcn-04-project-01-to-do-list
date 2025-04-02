@@ -9,6 +9,7 @@ namespace TodoListApp
 {
     public enum TaskStatus { Pending, InProgress, Done }
     public enum Priority { Low, Medium, High, Critical }
+    public enum Recurrence { None, Daily, Weekly, Monthly }
 
     public class Task
     {
@@ -18,6 +19,7 @@ namespace TodoListApp
         public TaskStatus Status { get; set; } = TaskStatus.Pending;
         public string Project { get; set; } = string.Empty;
         public Priority Priority { get; set; } = Priority.Medium;
+        public Recurrence Recurrence { get; set; } = Recurrence.None;
     }
 
     public static class NaturalDateParser
@@ -63,9 +65,47 @@ namespace TodoListApp
         public void Load()
         {
             if (!File.Exists(TasksFilePath)) return;
-            try { var json = File.ReadAllText(TasksFilePath); _tasks = JsonSerializer.Deserialize<List<Task>>(json) ?? new List<Task>(); }
-            catch { _tasks = File.Exists(BackupFilePath) ? JsonSerializer.Deserialize<List<Task>>(File.ReadAllText(BackupFilePath)) ?? new List<Task>() : new List<Task>(); }
+            try
+            {
+                var json = File.ReadAllText(TasksFilePath);
+                _tasks = JsonSerializer.Deserialize<List<Task>>(json) ?? new List<Task>();
+
+                // Handle recurrence: regenerate due dates for recurring tasks
+                foreach (var task in _tasks.ToList())
+                {
+                    if (task.Status == TaskStatus.Done && task.Recurrence != Recurrence.None)
+                    {
+                        var newTask = new Task
+                        {
+                            Title = task.Title,
+                            Project = task.Project,
+                            Priority = task.Priority,
+                            Recurrence = task.Recurrence,
+                            DueDate = GetNextDueDate(task.DueDate, task.Recurrence),
+                            Status = TaskStatus.Pending
+                        };
+                        _tasks.Add(newTask);
+                        task.Recurrence = Recurrence.None;
+                    }
+                }
+
+                Save();
+            }
+            catch
+            {
+                _tasks = File.Exists(BackupFilePath)
+                    ? JsonSerializer.Deserialize<List<Task>>(File.ReadAllText(BackupFilePath)) ?? new List<Task>()
+                    : new List<Task>();
+            }
         }
+
+        private DateTime GetNextDueDate(DateTime current, Recurrence recurrence) => recurrence switch
+        {
+            Recurrence.Daily => current.AddDays(1),
+            Recurrence.Weekly => current.AddDays(7),
+            Recurrence.Monthly => current.AddMonths(1),
+            _ => current
+        };
     }
 
     public static class UIHelper
@@ -92,7 +132,13 @@ namespace TodoListApp
 
         public static void ShowTask(Task task)
         {
-            Console.WriteLine($"\nID: {task.Id}\nTitle: {task.Title}\nDue: {task.DueDate:yyyy-MM-dd}\nStatus: {task.Status}\nProject: {task.Project}\nPriority: {task.Priority}");
+            Console.WriteLine($"\nID: {task.Id}");
+            Console.WriteLine($"Title: {task.Title}");
+            Console.WriteLine($"Due: {task.DueDate:yyyy-MM-dd}");
+            Console.WriteLine($"Status: {task.Status}");
+            Console.WriteLine($"Project: {task.Project}");
+            Console.WriteLine($"Priority: {task.Priority}");
+            Console.WriteLine($"Recurs: {task.Recurrence}");
         }
 
         public static void ListTasks(IEnumerable<Task> tasks)
@@ -100,7 +146,7 @@ namespace TodoListApp
             foreach (var task in tasks)
             {
                 Console.ForegroundColor = task.Status == TaskStatus.Done ? ConsoleColor.Green : ConsoleColor.White;
-                Console.WriteLine($"- {task.Title} [{task.Status}] ({task.DueDate:yyyy-MM-dd})");
+                Console.WriteLine($"- {task.Title} [{task.Status}] ({task.DueDate:yyyy-MM-dd}) [{task.Recurrence}]");
                 Console.ResetColor();
             }
         }
@@ -142,7 +188,7 @@ namespace TodoListApp
                     case "L": Show(taskManager.GetAll(), "All Tasks"); break;
                     case "P": Show(taskManager.GetSortedByProject(), "Tasks by Project"); break;
                     case "D": Show(taskManager.GetSortedByDate(), "Tasks by Due Date"); break;
-                    case "F": SearchTasks(taskManager); break;
+                    case "F": Search(taskManager); break;
                     case "V": ViewTask(taskManager); break;
                     case "E": EditTask(taskManager); break;
                     case "S": ChangeStatus(taskManager); break;
@@ -170,6 +216,7 @@ namespace TodoListApp
             var due = NaturalDateParser.Parse(Console.ReadLine() ?? "");
             Console.Write("Project: ");
             var project = Console.ReadLine() ?? "General";
+
             Console.WriteLine("Priority: [1] Low, [2] Medium, [3] High, [4] Critical");
             var key = Console.ReadKey(true).KeyChar;
             var priority = key switch
@@ -179,12 +226,31 @@ namespace TodoListApp
                 '4' => Priority.Critical,
                 _ => Priority.Medium
             };
-            manager.Add(new Task { Title = title, DueDate = due, Project = project, Priority = priority });
+
+            Console.WriteLine("Recurrence: [0] None, [1] Daily, [2] Weekly, [3] Monthly");
+            var recurKey = Console.ReadKey(true).KeyChar;
+            var recurrence = recurKey switch
+            {
+                '1' => Recurrence.Daily,
+                '2' => Recurrence.Weekly,
+                '3' => Recurrence.Monthly,
+                _ => Recurrence.None
+            };
+
+            manager.Add(new Task
+            {
+                Title = title,
+                DueDate = due,
+                Project = project,
+                Priority = priority,
+                Recurrence = recurrence
+            });
+
             Console.WriteLine("\nTask added. Press any key to continue...");
             Console.ReadKey();
         }
 
-        static void SearchTasks(TaskManager manager)
+        static void Search(TaskManager manager)
         {
             UIHelper.PrintTitle("Search Tasks");
             Console.Write("Enter search term: ");
@@ -275,7 +341,11 @@ namespace TodoListApp
             if (task == null) { Console.WriteLine("Not found."); Console.ReadKey(); return; }
             UIHelper.ShowTask(task);
             Console.Write("Confirm delete? (y/n): ");
-            if ((Console.ReadLine() ?? "n").Trim().ToLower() == "y") { manager.Delete(id); Console.WriteLine("Deleted."); }
+            if ((Console.ReadLine() ?? "n").Trim().ToLower() == "y")
+            {
+                manager.Delete(id);
+                Console.WriteLine("Deleted.");
+            }
             else Console.WriteLine("Cancelled.");
             Console.WriteLine("\nPress any key to continue...");
             Console.ReadKey();
