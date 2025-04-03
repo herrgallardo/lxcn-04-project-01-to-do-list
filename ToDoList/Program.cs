@@ -30,38 +30,81 @@ namespace TodoListApp
         public bool IsDueSoon => Status != TaskStatus.Done && !IsOverdue && DueDate <= DateTime.Today.AddDays(2);
     }
 
+    public class DateParseResult
+    {
+        public DateTime Date { get; set; }
+        public bool Success { get; set; }
+        public string ErrorMessage { get; set; } = string.Empty;
+
+        public static DateParseResult Ok(DateTime date) => new DateParseResult { Date = date, Success = true };
+        public static DateParseResult Error(string message) => new DateParseResult { Date = DateTime.Today, Success = false, ErrorMessage = message };
+    }
+
     public static class NaturalDateParser
     {
+        // Maximum years into the future for task dates (adjust as needed)
+        private const int MaxYearsInFuture = 10;
+
         // Handles various date formats like "tomorrow", "next week", "in 3 days"
         // Allows users to input dates in a natural language style
-        public static DateTime Parse(string input)
+        // Returns a DateParseResult with success/error status
+        public static DateParseResult Parse(string input)
         {
-            if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
+            if (string.IsNullOrWhiteSpace(input))
+                return DateParseResult.Ok(DateTime.Today);
 
             input = input.ToLowerInvariant().Trim();
 
-            return input switch
+            try
             {
-                "today" => DateTime.Today,
-                "tomorrow" => DateTime.Today.AddDays(1),
-                "next week" => DateTime.Today.AddDays(7),
-                "yesterday" => DateTime.Today.AddDays(-1),
-                "next month" => DateTime.Today.AddMonths(1),
-                "next year" => DateTime.Today.AddYears(1),
-                "monday" or "mon" => GetNextWeekday(DayOfWeek.Monday),
-                "tuesday" or "tue" => GetNextWeekday(DayOfWeek.Tuesday),
-                "wednesday" or "wed" => GetNextWeekday(DayOfWeek.Wednesday),
-                "thursday" or "thu" => GetNextWeekday(DayOfWeek.Thursday),
-                "friday" or "fri" => GetNextWeekday(DayOfWeek.Friday),
-                "saturday" or "sat" => GetNextWeekday(DayOfWeek.Saturday),
-                "sunday" or "sun" => GetNextWeekday(DayOfWeek.Sunday),
-                "end of week" => GetEndOfWeek(),
-                "end of month" => GetEndOfMonth(),
-                "end of year" => new DateTime(DateTime.Today.Year, 12, 31),
-                _ when input.StartsWith("in ") => ParseRelativeDate(input[3..]),
-                _ when input.StartsWith("next ") => ParseNextOccurrence(input[5..]),
-                _ => TryParseStandardDate(input)
-            };
+                DateTime resultDate = input switch
+                {
+                    "today" => DateTime.Today,
+                    "tomorrow" => DateTime.Today.AddDays(1),
+                    "next week" => DateTime.Today.AddDays(7),
+                    "yesterday" => DateTime.Today.AddDays(-1),
+                    "next month" => DateTime.Today.AddMonths(1),
+                    "next year" => DateTime.Today.AddYears(1),
+                    "monday" or "mon" => GetNextWeekday(DayOfWeek.Monday),
+                    "tuesday" or "tue" => GetNextWeekday(DayOfWeek.Tuesday),
+                    "wednesday" or "wed" => GetNextWeekday(DayOfWeek.Wednesday),
+                    "thursday" or "thu" => GetNextWeekday(DayOfWeek.Thursday),
+                    "friday" or "fri" => GetNextWeekday(DayOfWeek.Friday),
+                    "saturday" or "sat" => GetNextWeekday(DayOfWeek.Saturday),
+                    "sunday" or "sun" => GetNextWeekday(DayOfWeek.Sunday),
+                    "end of week" => GetEndOfWeek(),
+                    "end of month" => GetEndOfMonth(),
+                    "end of year" => new DateTime(DateTime.Today.Year, 12, 31),
+                    _ when input.StartsWith("in ") => ParseRelativeDate(input[3..]),
+                    _ when input.StartsWith("next ") => ParseNextOccurrence(input[5..]),
+                    _ => TryParseStandardDate(input, out var errorMessage)
+                        ? DateTime.Today : throw new FormatException(errorMessage)
+                };
+
+                // Validate the date is within reasonable range
+                return ValidateDate(resultDate);
+            }
+            catch (FormatException ex)
+            {
+                return DateParseResult.Error(ex.Message);
+            }
+            catch (Exception)
+            {
+                return DateParseResult.Error("Invalid date format. Please try again.");
+            }
+        }
+
+        // Validate that the date is within reasonable bounds
+        private static DateParseResult ValidateDate(DateTime date)
+        {
+            // Check if date is too far in the future
+            if (date > DateTime.Today.AddYears(MaxYearsInFuture))
+            {
+                return DateParseResult.Error($"Date cannot be more than {MaxYearsInFuture} years in the future.");
+            }
+
+            // If all validations pass
+            return DateParseResult.Ok(date);
         }
 
         // Returns the date of the next occurrence of the specified day of week
@@ -104,7 +147,7 @@ namespace TodoListApp
                 "week" => DateTime.Today.AddDays(7),
                 "month" => DateTime.Today.AddMonths(1),
                 "year" => DateTime.Today.AddYears(1),
-                _ => DateTime.Today
+                _ => throw new FormatException($"Unknown occurrence '{occurrence}'")
             };
         }
 
@@ -112,7 +155,11 @@ namespace TodoListApp
         private static DateTime ParseRelativeDate(string relativeInput)
         {
             var parts = relativeInput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 2 || !int.TryParse(parts[0], out int amount)) return DateTime.Today;
+            if (parts.Length != 2 || !int.TryParse(parts[0], out int amount))
+                throw new FormatException("Invalid relative date format. Use 'in X days/weeks/months/years'.");
+
+            if (amount <= 0)
+                throw new FormatException("Time amount must be positive.");
 
             return parts[1] switch
             {
@@ -120,23 +167,28 @@ namespace TodoListApp
                 "week" or "weeks" => DateTime.Today.AddDays(amount * 7),
                 "month" or "months" => DateTime.Today.AddMonths(amount),
                 "year" or "years" => DateTime.Today.AddYears(amount),
-                _ => DateTime.Today
+                _ => throw new FormatException($"Unknown time unit '{parts[1]}'")
             };
         }
 
-        // Fallback to standard date parsing with several format attempts
-        // First tries exact formats, then falls back to culture-specific parsing
-        private static DateTime TryParseStandardDate(string input)
+        // Attempts to parse a standard date format
+        // Returns true if successful, false otherwise with an error message
+        private static bool TryParseStandardDate(string input, out string errorMessage)
         {
             string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "d-MMM", "d-MMM-yyyy", "d MMM", "d MMM yyyy" };
+            errorMessage = string.Empty;
 
-            if (DateTime.TryParseExact(input, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var exactResult))
-                return exactResult;
+            // Try parsing with exact formats first
+            if (DateTime.TryParseExact(input, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                return true;
 
-            if (DateTime.TryParse(input, out var result))
-                return result;
+            // Try with culture-specific parsing as fallback
+            if (DateTime.TryParse(input, out _))
+                return true;
 
-            return DateTime.Today;
+            // If parsing fails, provide a helpful error message
+            errorMessage = $"Invalid date format '{input}'. Please use one of the following formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY, or enter natural language like 'tomorrow', 'next week', etc.";
+            return false;
         }
     }
 
@@ -952,12 +1004,41 @@ namespace TodoListApp
 
             Console.Write("Title: ");
             var title = Console.ReadLine() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Title cannot be empty. Task creation cancelled.");
+                Console.ResetColor();
+                Console.WriteLine("Press any key to continue...");
+                Console.ReadKey();
+                return;
+            }
 
             Console.Write("Description (optional): ");
             var description = Console.ReadLine() ?? string.Empty;
 
-            Console.Write("Due Date (today/tomorrow/next week or YYYY-MM-DD): ");
-            var due = NaturalDateParser.Parse(Console.ReadLine() ?? "");
+            DateTime dueDate = DateTime.Today; // Initialize with default value
+            bool validDate = false;
+            do
+            {
+                Console.Write("Due Date (today/tomorrow/next week or YYYY-MM-DD): ");
+                var dateInput = Console.ReadLine() ?? string.Empty;
+                var parseResult = NaturalDateParser.Parse(dateInput);
+
+                if (parseResult.Success)
+                {
+                    dueDate = parseResult.Date;
+                    validDate = true;
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"Error: {parseResult.ErrorMessage}");
+                    Console.ResetColor();
+                    Console.WriteLine("Press any key to try again...");
+                    Console.ReadKey(true);
+                }
+            } while (!validDate);
 
             Console.Write("Project: ");
             var project = Console.ReadLine() ?? string.Empty;
@@ -1005,7 +1086,7 @@ namespace TodoListApp
             {
                 Title = title,
                 Description = description,
-                DueDate = due,
+                DueDate = dueDate,
                 Project = project,
                 Priority = priority,
                 Tags = tags,
@@ -1041,9 +1122,36 @@ namespace TodoListApp
             var description = Console.ReadLine();
             if (description != null) task.Description = description;
 
-            Console.Write($"New Due Date [{task.DueDate:yyyy-MM-dd}]: ");
-            var dateInput = Console.ReadLine();
-            if (!string.IsNullOrWhiteSpace(dateInput)) task.DueDate = NaturalDateParser.Parse(dateInput);
+            // No need to declare a dueDate variable here since we're modifying task.DueDate directly
+            bool validDate = false;
+            do
+            {
+                Console.Write($"New Due Date [{task.DueDate:yyyy-MM-dd}]: ");
+                var dateInput = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(dateInput))
+                {
+                    // Keep the current date if input is empty
+                    validDate = true;
+                }
+                else
+                {
+                    var parseResult = NaturalDateParser.Parse(dateInput);
+                    if (parseResult.Success)
+                    {
+                        task.DueDate = parseResult.Date;
+                        validDate = true;
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"Error: {parseResult.ErrorMessage}");
+                        Console.ResetColor();
+                        Console.WriteLine("Press any key to try again or just press Enter to keep the current date...");
+                        Console.ReadKey(true);
+                    }
+                }
+            } while (!validDate);
 
             Console.Write($"New Project [{task.Project}]: ");
             var project = Console.ReadLine();
