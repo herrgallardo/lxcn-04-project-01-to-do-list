@@ -25,13 +25,15 @@ namespace TodoListApp
         public List<string> Tags { get; set; } = new List<string>();
         public Recurrence Recurrence { get; set; } = Recurrence.None;
 
-        // Computed properties
+        // Quick checks for task state - used for color coding and filtering
         public bool IsOverdue => Status != TaskStatus.Done && DueDate < DateTime.Today;
         public bool IsDueSoon => Status != TaskStatus.Done && !IsOverdue && DueDate <= DateTime.Today.AddDays(2);
     }
 
     public static class NaturalDateParser
     {
+        // Handles various date formats like "tomorrow", "next week", "in 3 days"
+        // Allows users to input dates in a natural language style
         public static DateTime Parse(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return DateTime.Today;
@@ -62,6 +64,8 @@ namespace TodoListApp
             };
         }
 
+        // Returns the date of the next occurrence of the specified day of week
+        // If today is the target day, returns next week's occurrence
         private static DateTime GetNextWeekday(DayOfWeek dayOfWeek)
         {
             DateTime date = DateTime.Today;
@@ -70,6 +74,7 @@ namespace TodoListApp
             return date.AddDays(daysToAdd);
         }
 
+        // Returns the date for the next Sunday (end of week)
         private static DateTime GetEndOfWeek()
         {
             DateTime date = DateTime.Today;
@@ -77,12 +82,14 @@ namespace TodoListApp
             return date.AddDays(daysToAdd);
         }
 
+        // Returns the last day of the current month
         private static DateTime GetEndOfMonth()
         {
             DateTime date = DateTime.Today;
             return new DateTime(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month));
         }
 
+        // Handles "next X" format where X is a day or time period
         private static DateTime ParseNextOccurrence(string occurrence)
         {
             return occurrence switch
@@ -101,6 +108,7 @@ namespace TodoListApp
             };
         }
 
+        // Handles "in X days/weeks/months/years" format
         private static DateTime ParseRelativeDate(string relativeInput)
         {
             var parts = relativeInput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -116,6 +124,8 @@ namespace TodoListApp
             };
         }
 
+        // Fallback to standard date parsing with several format attempts
+        // First tries exact formats, then falls back to culture-specific parsing
         private static DateTime TryParseStandardDate(string input)
         {
             string[] formats = { "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "d-MMM", "d-MMM-yyyy", "d MMM", "d MMM yyyy" };
@@ -152,6 +162,7 @@ namespace TodoListApp
         public Task? Find(Guid id) => _tasks.FirstOrDefault(t => t.Id == id);
         public void Update(Task task) { var i = _tasks.FindIndex(t => t.Id == task.Id); if (i >= 0) { _tasks[i] = task; Save(); } }
 
+        // Delete a task and store it for possible undo operations
         public bool Delete(Guid id)
         {
             var task = _tasks.FirstOrDefault(t => t.Id == id);
@@ -164,6 +175,7 @@ namespace TodoListApp
             return true;
         }
 
+        // Restore the most recently deleted task
         public bool UndoDelete()
         {
             if (_deletedTasks.Count == 0) return false;
@@ -176,6 +188,7 @@ namespace TodoListApp
             return true;
         }
 
+        // Delete multiple tasks at once and store them for undo
         public bool BulkDelete(List<Guid> ids)
         {
             bool anyDeleted = false;
@@ -194,6 +207,7 @@ namespace TodoListApp
             return anyDeleted;
         }
 
+        // Update the status of multiple tasks at once
         public bool BulkUpdateStatus(List<Guid> ids, TaskStatus status)
         {
             bool anyUpdated = false;
@@ -211,6 +225,7 @@ namespace TodoListApp
             return anyUpdated;
         }
 
+        // Get a distinct list of all projects for filtering
         public IEnumerable<string> GetAllProjects()
         {
             return _tasks.Select(t => t.Project)
@@ -219,6 +234,7 @@ namespace TodoListApp
                         .OrderBy(p => p);
         }
 
+        // Get a distinct list of all tags for filtering
         public IEnumerable<string> GetAllTags()
         {
             return _tasks.SelectMany(t => t.Tags)
@@ -227,6 +243,7 @@ namespace TodoListApp
                         .OrderBy(t => t);
         }
 
+        // Generate statistics about the task list for dashboard display
         public Dictionary<string, int> GetTaskStatistics()
         {
             return new Dictionary<string, int>
@@ -244,6 +261,7 @@ namespace TodoListApp
             };
         }
 
+        // Save tasks to a JSON file with backup creation
         public void Save()
         {
             if (File.Exists(TasksFilePath)) File.Copy(TasksFilePath, BackupFilePath, true);
@@ -251,6 +269,8 @@ namespace TodoListApp
             File.WriteAllText(TasksFilePath, json);
         }
 
+        // Load tasks from JSON and handle recurring tasks
+        // If a recurring task is completed, create a new pending instance
         public void Load()
         {
             if (!File.Exists(TasksFilePath)) return;
@@ -259,6 +279,8 @@ namespace TodoListApp
                 var json = File.ReadAllText(TasksFilePath);
                 _tasks = JsonSerializer.Deserialize<List<Task>>(json) ?? new List<Task>();
 
+                // Process recurring tasks - if a recurring task is completed,
+                // create a new instance for the next occurrence and disable recurrence on completed task
                 foreach (var task in _tasks.ToList())
                 {
                     if (task.Status == TaskStatus.Done && task.Recurrence != Recurrence.None)
@@ -283,12 +305,14 @@ namespace TodoListApp
             }
             catch
             {
+                // If the main file is corrupted, try loading from backup
                 _tasks = File.Exists(BackupFilePath)
                     ? JsonSerializer.Deserialize<List<Task>>(File.ReadAllText(BackupFilePath)) ?? new List<Task>()
                     : new List<Task>();
             }
         }
 
+        // Calculate the next due date for recurring tasks based on recurrence pattern
         private DateTime GetNextDueDate(DateTime current, Recurrence recurrence) => recurrence switch
         {
             Recurrence.Daily => current.AddDays(1),
@@ -300,6 +324,7 @@ namespace TodoListApp
             _ => current
         };
 
+        // Find the next weekday (Monday-Friday) from the given date
         private DateTime GetNextWeekday(DateTime date)
         {
             date = date.AddDays(1);
@@ -310,6 +335,7 @@ namespace TodoListApp
             return date;
         }
 
+        // Find the next weekend day (Saturday-Sunday) from the given date
         private DateTime GetNextWeekend(DateTime date)
         {
             date = date.AddDays(1);
@@ -320,6 +346,7 @@ namespace TodoListApp
             return date;
         }
 
+        // Export the task list to a CSV file for external processing
         public void ExportToCsv()
         {
             var path = Path.Combine(AppContext.BaseDirectory, "../../../tasks_export.csv");
@@ -345,6 +372,7 @@ namespace TodoListApp
 
     public static class UIHelper
     {
+        // Format and display a title section with a border
         public static void PrintTitle(string title)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -354,6 +382,7 @@ namespace TodoListApp
             Console.ResetColor();
         }
 
+        // Display menu options with highlighted keys
         public static void PrintMenu(Dictionary<string, string> options)
         {
             foreach (var opt in options)
@@ -365,6 +394,7 @@ namespace TodoListApp
             }
         }
 
+        // Determine the appropriate color for a task based on its status and priority
         public static ConsoleColor GetTaskColor(Task task)
         {
             return task.Status == TaskStatus.Done ? ConsoleColor.Green :
@@ -376,6 +406,7 @@ namespace TodoListApp
                    ConsoleColor.White;
         }
 
+        // Display detailed information about a single task
         public static void ShowTask(Task task)
         {
             Console.ForegroundColor = GetTaskColor(task);
@@ -413,6 +444,7 @@ namespace TodoListApp
             }
         }
 
+        // Display a paginated list of tasks with color coding
         public static void ListTasks(IEnumerable<Task> tasks)
         {
             if (!tasks.Any())
@@ -423,6 +455,7 @@ namespace TodoListApp
                 return;
             }
 
+            // Display table header
             Console.ForegroundColor = ConsoleColor.DarkCyan;
             Console.WriteLine($"{"#",-5} | {"Title",-25} | {"Due Date",-10} | {"Project",-15} | {"Priority",-8} | {"Status",-10}");
             Console.WriteLine(new string('-', 85)); // Shortened line length for better readability
@@ -439,6 +472,7 @@ namespace TodoListApp
                 counter++;
                 index++;
 
+                // Pagination: show 20 tasks at a time
                 if (counter >= 20 && tasks.Count() > 20)
                 {
                     Console.WriteLine("Press any key to see more tasks or ESC to return...");
@@ -456,6 +490,7 @@ namespace TodoListApp
             }
         }
 
+        // Display task statistics with color coding
         public static void DisplayStatistics(Dictionary<string, int> stats)
         {
             PrintTitle("Task Statistics");
@@ -472,12 +507,13 @@ namespace TodoListApp
             }
         }
 
+        // Truncate string with ellipsis for better display in limited space
         public static string TruncateString(string str, int maxLength)
         {
             return str.Length <= maxLength ? str : str.Substring(0, maxLength - 3) + "...";
         }
 
-        // Show an animated loading/processing indicator
+        // Display an animated spinner to indicate activity
         public static void ShowLoadingAnimation(string message, int duration)
         {
             Console.Write(message);
@@ -554,7 +590,7 @@ namespace TodoListApp
                 }
                 catch (Exception ex)
                 {
-                    // Global exception handler
+                    // Global exception handler to prevent crashes
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine($"An error occurred: {ex.Message}");
                     Console.ResetColor();
@@ -564,7 +600,7 @@ namespace TodoListApp
             }
         }
 
-        // New welcome screen with ASCII art logo
+        // Display welcome screen with ASCII art and task statistics
         static void DisplayWelcomeScreen()
         {
             Console.Clear();
@@ -603,7 +639,8 @@ namespace TodoListApp
             Console.ReadKey(true);
         }
 
-        // Helper method to select a task from a list
+        // Helper to select a single task from a list with numbering
+        // Returns the selected task or null if cancelled
         static Task? SelectTask(string title = "Select a Task", IEnumerable<Task>? taskList = null)
         {
             var tasks = taskList?.ToList() ?? taskManager.GetAll().ToList();
@@ -637,7 +674,8 @@ namespace TodoListApp
             return null;
         }
 
-        // Helper method to select multiple tasks
+        // Helper to select multiple tasks from a list
+        // Returns a list of selected tasks (empty if cancelled)
         static List<Task> SelectMultipleTasks(string title = "Select Multiple Tasks", IEnumerable<Task>? taskList = null)
         {
             var tasks = taskList?.ToList() ?? taskManager.GetAll().ToList();
@@ -679,7 +717,7 @@ namespace TodoListApp
             return selectedTasks;
         }
 
-        // Enhanced task listing with more filtering options
+        // Complex task listing with filtering, sorting, and pagination
         static void ListTasks()
         {
             // Show list options
@@ -807,7 +845,7 @@ namespace TodoListApp
                     return;
             }
 
-            // Get tasks based on filters
+            // Apply all filters using LINQ, handling nulls safely
             var filteredTasks = taskManager.GetAll().Where(t =>
                 (!status.HasValue || t.Status == status.Value) &&
                 (string.IsNullOrWhiteSpace(keyword) ||
@@ -821,7 +859,7 @@ namespace TodoListApp
                 (string.IsNullOrWhiteSpace(tag) || t.Tags.Any(tg => tg.Equals(tag, StringComparison.OrdinalIgnoreCase)))
             );
 
-            // Sort tasks
+            // Apply sort based on current sort field
             filteredTasks = currentSortField switch
             {
                 "date" => sortAscending ? filteredTasks.OrderBy(t => t.DueDate) : filteredTasks.OrderByDescending(t => t.DueDate),
@@ -994,6 +1032,7 @@ namespace TodoListApp
             UIHelper.ShowTask(task);
             Console.WriteLine("Leave fields blank to keep current values.");
 
+            // Collect new values, keeping old ones if input is empty
             Console.Write($"New Title [{task.Title}]: ");
             var title = Console.ReadLine();
             if (!string.IsNullOrWhiteSpace(title)) task.Title = title;
@@ -1142,6 +1181,7 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
+        // Handle operations on multiple tasks at once (mark as done, in progress, or delete)
         static void BulkOperations()
         {
             UIHelper.PrintMenu(new Dictionary<string, string>
@@ -1229,12 +1269,13 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
+        // Display task statistics with project breakdowns
         static void ShowStatistics()
         {
             var stats = taskManager.GetTaskStatistics();
             UIHelper.DisplayStatistics(stats);
 
-            // Also show projects breakdown
+            // Project breakdown - show completion stats for each project
             Console.WriteLine("\n--- Projects Breakdown ---");
             var allProjects = taskManager.GetAllProjects().ToList();
             foreach (var project in allProjects)
@@ -1263,6 +1304,7 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
+        // Restore the most recently deleted task
         static void UndoDelete()
         {
             UIHelper.PrintTitle("Undo Delete");
@@ -1287,6 +1329,7 @@ namespace TodoListApp
             Console.ReadKey();
         }
 
+        // Export task data to CSV for use in other applications
         static void ExportTasks()
         {
             UIHelper.PrintTitle("Export Tasks to CSV");
