@@ -133,7 +133,8 @@ namespace TodoListApp
     public class TaskManager
     {
         private List<Task> _tasks = new();
-        private List<Task> _deletedTasks = new(); // For undo functionality
+        private List<Task> _deletedTasks = new(); // For tracking all deleted tasks
+        private List<List<Task>> _deletionBatches = new(); // For tracking batches of deletions
         private static readonly string TasksFilePath = Path.Combine(AppContext.BaseDirectory, "../../../tasks.json");
         private static readonly string BackupFilePath = Path.Combine(AppContext.BaseDirectory, "../../../tasks_backup.json");
 
@@ -423,19 +424,21 @@ namespace TodoListApp
             }
 
             Console.ForegroundColor = ConsoleColor.DarkCyan;
-            Console.WriteLine($"{"ID",-36} | {"Title",-25} | {"Due Date",-10} | {"Project",-15} | {"Priority",-8} | {"Status",-10}");
-            Console.WriteLine(new string('-', 120));
+            Console.WriteLine($"{"#",-5} | {"Title",-25} | {"Due Date",-10} | {"Project",-15} | {"Priority",-8} | {"Status",-10}");
+            Console.WriteLine(new string('-', 85)); // Shortened line length for better readability
             Console.ResetColor();
 
-            // Add pagination for large task lists
             int counter = 0;
+            int index = 1; // Use a simple index for display
             foreach (var task in tasks)
             {
                 Console.ForegroundColor = GetTaskColor(task);
-                Console.WriteLine($"{task.Id,-36} | {TruncateString(task.Title, 25),-25} | {task.DueDate:yyyy-MM-dd} | {TruncateString(task.Project, 15),-15} | {task.Priority,-8} | {task.Status,-10}");
+                Console.WriteLine($"{index,-5} | {TruncateString(task.Title, 25),-25} | {task.DueDate:yyyy-MM-dd} | {TruncateString(task.Project, 15),-15} | {task.Priority,-8} | {task.Status,-10}");
                 Console.ResetColor();
 
                 counter++;
+                index++;
+
                 if (counter >= 20 && tasks.Count() > 20)
                 {
                     Console.WriteLine("Press any key to see more tasks or ESC to return...");
@@ -446,8 +449,8 @@ namespace TodoListApp
 
                     // Re-print header
                     Console.ForegroundColor = ConsoleColor.DarkCyan;
-                    Console.WriteLine($"{"ID",-36} | {"Title",-25} | {"Due Date",-10} | {"Project",-15} | {"Priority",-8} | {"Status",-10}");
-                    Console.WriteLine(new string('-', 120));
+                    Console.WriteLine($"{"#",-5} | {"Title",-25} | {"Due Date",-10} | {"Project",-15} | {"Priority",-8} | {"Status",-10}");
+                    Console.WriteLine(new string('-', 85));
                     Console.ResetColor();
                 }
             }
@@ -600,6 +603,82 @@ namespace TodoListApp
             Console.ReadKey(true);
         }
 
+        // Helper method to select a task from a list
+        static Task? SelectTask(string title = "Select a Task", IEnumerable<Task>? taskList = null)
+        {
+            var tasks = taskList?.ToList() ?? taskManager.GetAll().ToList();
+            if (!tasks.Any())
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("No tasks found.");
+                Console.ResetColor();
+                Console.ReadKey(true);
+                return null;
+            }
+
+            UIHelper.PrintTitle(title);
+
+            for (int i = 0; i < tasks.Count; i++)
+            {
+                var task = tasks[i];
+                Console.ForegroundColor = UIHelper.GetTaskColor(task);
+                Console.WriteLine($"[{i + 1}] {task.Title} - Due: {task.DueDate:yyyy-MM-dd} ({task.Status})");
+                Console.ResetColor();
+            }
+
+            Console.Write("\nEnter task number (or 0 to cancel): ");
+            if (int.TryParse(Console.ReadLine(), out var selection) && selection > 0 && selection <= tasks.Count)
+            {
+                return tasks[selection - 1];
+            }
+
+            Console.WriteLine("Operation cancelled or invalid selection.");
+            Console.ReadKey(true);
+            return null;
+        }
+
+        // Helper method to select multiple tasks
+        static List<Task> SelectMultipleTasks(string title = "Select Multiple Tasks", IEnumerable<Task>? taskList = null)
+        {
+            var tasks = taskList?.ToList() ?? taskManager.GetAll().ToList();
+            if (!tasks.Any())
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("No tasks found.");
+                Console.ResetColor();
+                Console.ReadKey(true);
+                return new List<Task>();
+            }
+
+            UIHelper.PrintTitle(title);
+
+            for (int i = 0; i < tasks.Count; i++)
+            {
+                var task = tasks[i];
+                Console.ForegroundColor = UIHelper.GetTaskColor(task);
+                Console.WriteLine($"[{i + 1}] {task.Title} - Due: {task.DueDate:yyyy-MM-dd} ({task.Status})");
+                Console.ResetColor();
+            }
+
+            Console.WriteLine("\nEnter task numbers separated by commas (or 0 to cancel):");
+            var input = Console.ReadLine() ?? string.Empty;
+
+            if (input == "0") return new List<Task>();
+
+            var selectedTasks = new List<Task>();
+            var selections = input.Split(',').Select(s => s.Trim());
+
+            foreach (var sel in selections)
+            {
+                if (int.TryParse(sel, out var index) && index > 0 && index <= tasks.Count)
+                {
+                    selectedTasks.Add(tasks[index - 1]);
+                }
+            }
+
+            return selectedTasks;
+        }
+
         // Enhanced task listing with more filtering options
         static void ListTasks()
         {
@@ -661,7 +740,7 @@ namespace TodoListApp
                     keyword = Console.ReadLine();
                     break;
                 case ConsoleKey.F:
-                    // Show available projects
+                    // Show available projects for selection
                     var projects = taskManager.GetAllProjects().ToList();
                     if (projects.Count == 0)
                     {
@@ -670,21 +749,30 @@ namespace TodoListApp
                         return;
                     }
 
-                    Console.WriteLine("Select a project:");
                     for (int i = 0; i < projects.Count; i++)
                     {
                         Console.WriteLine($"[{i + 1}] {projects[i]}");
                     }
 
-                    Console.Write("Enter project number: ");
+                    Console.Write("Enter project number (or 0 to cancel): ");
                     if (int.TryParse(Console.ReadLine(), out int projectIndex) &&
                         projectIndex > 0 && projectIndex <= projects.Count)
                     {
                         project = projects[projectIndex - 1];
                     }
+                    else if (projectIndex != 0)
+                    {
+                        Console.WriteLine("Invalid selection.");
+                        Console.ReadKey(true);
+                        return;
+                    }
+                    else
+                    {
+                        return;
+                    }
                     break;
                 case ConsoleKey.G:
-                    // Show available tags
+                    // Show available tags for selection
                     var tags = taskManager.GetAllTags().ToList();
                     if (tags.Count == 0)
                     {
@@ -693,17 +781,26 @@ namespace TodoListApp
                         return;
                     }
 
-                    Console.WriteLine("Select a tag:");
                     for (int i = 0; i < tags.Count; i++)
                     {
                         Console.WriteLine($"[{i + 1}] {tags[i]}");
                     }
 
-                    Console.Write("Enter tag number: ");
+                    Console.Write("Enter tag number (or 0 to cancel): ");
                     if (int.TryParse(Console.ReadLine(), out int tagIndex) &&
                         tagIndex > 0 && tagIndex <= tags.Count)
                     {
                         tag = tags[tagIndex - 1];
+                    }
+                    else if (tagIndex != 0)
+                    {
+                        Console.WriteLine("Invalid selection.");
+                        Console.ReadKey(true);
+                        return;
+                    }
+                    else
+                    {
+                        return;
                     }
                     break;
                 default:
@@ -802,23 +899,9 @@ namespace TodoListApp
 
         static void ViewTaskDetails()
         {
-            UIHelper.PrintTitle("View Task Details");
-
-            Console.Write("Enter Task ID: ");
-            if (!Guid.TryParse(Console.ReadLine(), out var id))
-            {
-                Console.WriteLine("Invalid ID format.");
-                Console.ReadKey(true);
-                return;
-            }
-
-            var task = taskManager.Find(id);
-            if (task == null)
-            {
-                Console.WriteLine("Task not found.");
-                Console.ReadKey(true);
-                return;
-            }
+            // Use the selection helper to choose a task
+            var task = SelectTask("View Task Details");
+            if (task == null) return;
 
             UIHelper.ShowTask(task);
             Console.WriteLine("\nPress any key to return...");
@@ -903,23 +986,9 @@ namespace TodoListApp
 
         static void EditTask()
         {
-            UIHelper.PrintTitle("Edit Task");
-
-            Console.Write("Enter task ID: ");
-            if (!Guid.TryParse(Console.ReadLine(), out var id))
-            {
-                Console.WriteLine("Invalid ID format.");
-                Console.ReadKey(true);
-                return;
-            }
-
-            var task = taskManager.Find(id);
-            if (task == null)
-            {
-                Console.WriteLine("Task not found.");
-                Console.ReadKey(true);
-                return;
-            }
+            // Use the selection helper to choose a task to edit
+            var task = SelectTask("Edit Task");
+            if (task == null) return;
 
             Console.WriteLine("Current task details:");
             UIHelper.ShowTask(task);
@@ -1000,23 +1069,9 @@ namespace TodoListApp
 
         static void ChangeStatus()
         {
-            UIHelper.PrintTitle("Change Task Status");
-
-            Console.Write("Task ID: ");
-            if (!Guid.TryParse(Console.ReadLine(), out var id))
-            {
-                Console.WriteLine("Invalid ID format.");
-                Console.ReadKey(true);
-                return;
-            }
-
-            var task = taskManager.Find(id);
-            if (task == null)
-            {
-                Console.WriteLine("Task not found.");
-                Console.ReadKey(true);
-                return;
-            }
+            // Use the selection helper to choose a task to change status
+            var task = SelectTask("Change Task Status");
+            if (task == null) return;
 
             Console.WriteLine($"Current Status: {task.Status}");
             Console.WriteLine("[P] Pending | [I] In Progress | [D] Done");
@@ -1051,23 +1106,9 @@ namespace TodoListApp
 
         static void DeleteTask()
         {
-            UIHelper.PrintTitle("Remove Task");
-
-            Console.Write("Task ID: ");
-            if (!Guid.TryParse(Console.ReadLine(), out var id))
-            {
-                Console.WriteLine("Invalid ID format.");
-                Console.ReadKey(true);
-                return;
-            }
-
-            var task = taskManager.Find(id);
-            if (task == null)
-            {
-                Console.WriteLine("Task not found.");
-                Console.ReadKey(true);
-                return;
-            }
+            // Use the selection helper to choose a task to delete
+            var task = SelectTask("Remove Task");
+            if (task == null) return;
 
             Console.WriteLine("Task to be removed:");
             UIHelper.ShowTask(task);
@@ -1081,7 +1122,7 @@ namespace TodoListApp
             }
 
             Console.WriteLine();
-            var removed = taskManager.Delete(id);
+            var removed = taskManager.Delete(task.Id);
 
             if (removed)
             {
@@ -1119,29 +1160,27 @@ namespace TodoListApp
                 return;
             }
 
-            Console.WriteLine("Enter task IDs separated by commas:");
-            var idInput = Console.ReadLine() ?? string.Empty;
-            var idStrings = idInput.Split(',').Select(s => s.Trim());
-
-            var ids = new List<Guid>();
-            foreach (var idStr in idStrings)
+            // Get operation description for task selection prompt
+            string operationTitle = key switch
             {
-                if (Guid.TryParse(idStr, out var id))
-                {
-                    ids.Add(id);
-                }
-                else
-                {
-                    Console.WriteLine($"Invalid ID format: {idStr}");
-                }
-            }
+                ConsoleKey.M => "Mark Tasks as Done",
+                ConsoleKey.P => "Mark Tasks as In Progress",
+                ConsoleKey.D => "Delete Tasks",
+                _ => "Select Tasks"
+            };
 
-            if (ids.Count == 0)
+            // Use the multiple selection helper
+            var selectedTasks = SelectMultipleTasks(operationTitle);
+
+            if (selectedTasks.Count == 0)
             {
-                Console.WriteLine("No valid IDs provided.");
+                Console.WriteLine("No tasks selected or operation cancelled.");
                 Console.ReadKey(true);
                 return;
             }
+
+            // Convert tasks to IDs for the bulk operations
+            var ids = selectedTasks.Select(t => t.Id).ToList();
 
             bool success = false;
             string operationName = "";
@@ -1233,8 +1272,9 @@ namespace TodoListApp
             if (success)
             {
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("✅ Last deleted task restored successfully!");
+                Console.WriteLine("✅ Last deletion operation undone successfully!");
                 Console.ResetColor();
+                Console.WriteLine("All tasks from the last deletion have been restored.");
             }
             else
             {
