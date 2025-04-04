@@ -1,0 +1,362 @@
+[
+  {
+    "Id": "0fe59796-f64f-418b-a747-73035f8c4851",
+    "Title": "Complete project documentation",
+    "Description": "Finalize all technical documentation for the client handover",
+    "DueDate": "2025-04-10T00:00:00+02:00",
+    "CreatedDate": "2025-03-25T09:15:22.3289637+01:00",
+    "Status": 1,
+    "Project": "ClientProject",
+    "Priority": 2,
+    "Tags": [
+      "documentation",
+      "client",
+      "deadline"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "1fe59796-f64f-418b-a747-73035f8c4852",
+    "Title": "Weekly team meeting",
+    "Description": "Discuss project progress and address any blockers",
+    "DueDate": "2025-04-09T00:00:00+02:00",
+    "CreatedDate": "2025-03-20T07:30:00.3289637+01:00",
+    "Status": 0,
+    "Project": "TeamManagement",
+    "Priority": 1,
+    "Tags": [
+      "meeting",
+      "team",
+      "weekly"
+    ],
+    "Recurrence": 2,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "2fe59796-f64f-418b-a747-73035f8c4853",
+    "Title": "Submit expense report",
+    "Description": "Compile and submit monthly business expenses",
+    "DueDate": "2025-04-30T00:00:00+02:00",
+    "CreatedDate": "2025-04-01T09:45:12.3289637+02:00",
+    "Status": 0,
+    "Project": "Finance",
+    "Priority": 1,
+    "Tags": [
+      "finance",
+      "report",
+      "monthly"
+    ],
+    "Recurrence": 3,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "3fe59796-f64f-418b-a747-73035f8c4854",
+    "Title": "Fix critical bug in authentication module",
+    "Description": "Users unable to reset passwords - high priority fix needed",
+    "DueDate": "2025-04-05T00:00:00+02:00",
+    "CreatedDate": "2025-04-03T14:20:05.3289637+02:00",
+    "Status": 1,
+    "Project": "BugFixes",
+    "Priority": 3,
+    "Tags": [
+      "bug",
+      "critical",
+      "security"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": true
+  },
+  {
+    "Id": "4fe59796-f64f-418b-a747-73035f8c4855",
+    "Title": "Prepare quarterly performance review",
+    "Description": "Review team members\u0027 performance and prepare feedback",
+    "DueDate": "2025-04-15T00:00:00+02:00",
+    "CreatedDate": "2025-03-28T10:10:33.3289637+01:00",
+    "Status": 0,
+    "Project": "HR",
+    "Priority": 2,
+    "Tags": [
+      "HR",
+      "reviews",
+      "quarterly"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "5fe59796-f64f-418b-a747-73035f8c4856",
+    "Title": "Update company website",
+    "Description": "Add new team members and update product information",
+    "DueDate": "2025-04-20T00:00:00+02:00",
+    "CreatedDate": "2025-03-30T13:40:19.3289637+02:00",
+    "Status": 0,
+    "Project": "Marketing",
+    "Priority": 1,
+    "Tags": [
+      "website",
+      "content",
+      "update"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "6fe59796-f64f-418b-a747-73035f8c4857",
+    "Title": "Research new cloud providers",
+    "Description": "Compare pricing and features for potential migration",
+    "DueDate": "2025-05-10T00:00:00+02:00",
+    "CreatedDate": "2025-04-02T09:15:40.3289637+02:00",
+    "Status": 0,
+    "Project": "Infrastructure",
+    "Priority": 1,
+    "Tags": [
+      "research",
+      "cloud",
+      "migration"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "7fe59796-f64f-418b-a747-73035f8c4858",
+    "Title": "Daily code review",
+    "Description": "Review pull requests and provide feedback",
+    "DueDate": "2025-04-05T00:00:00+02:00",
+    "CreatedDate": "2025-04-01T08:00:00.3289637+02:00",
+    "Status": 0,
+    "Project": "Development",
+    "Priority": 2,
+    "Tags": [
+      "code",
+      "review",
+      "daily"
+    ],
+    "Recurrence": 1,
+    "IsOverdue": false,
+    "IsDueSoon": true
+  },
+  {
+    "Id": "8fe59796-f64f-418b-a747-73035f8c4859",
+    "Title": "Backup database",
+    "Description": "Perform weekly database backup and verify integrity",
+    "DueDate": "2025-04-07T00:00:00+02:00",
+    "CreatedDate": "2025-03-31T18:20:15.3289637+02:00",
+    "Status": 0,
+    "Project": "Maintenance",
+    "Priority": 2,
+    "Tags": [
+      "database",
+      "backup",
+      "weekly"
+    ],
+    "Recurrence": 2,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "9fe59796-f64f-418b-a747-73035f8c4860",
+    "Title": "Server patch deployment",
+    "Description": "Apply security patches to production servers",
+    "DueDate": "2025-04-06T00:00:00+02:00",
+    "CreatedDate": "2025-04-01T15:45:22.3289637+02:00",
+    "Status": 0,
+    "Project": "Maintenance",
+    "Priority": 3,
+    "Tags": [
+      "security",
+      "servers",
+      "patches"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": true
+  },
+  {
+    "Id": "10fe5979-f64f-418b-a747-73035f8c4861",
+    "Title": "Prepare client presentation",
+    "Description": "Create slides for upcoming product demo",
+    "DueDate": "2025-04-08T00:00:00+02:00",
+    "CreatedDate": "2025-04-02T11:30:45.3289637+02:00",
+    "Status": 1,
+    "Project": "ClientProject",
+    "Priority": 2,
+    "Tags": [
+      "presentation",
+      "client",
+      "demo"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "11fe5979-f64f-418b-a747-73035f8c4862",
+    "Title": "Renew SSL certificates",
+    "Description": "Update expiring SSL certificates for company domains",
+    "DueDate": "2025-04-25T00:00:00+02:00",
+    "CreatedDate": "2025-03-25T13:15:10.3289637+01:00",
+    "Status": 0,
+    "Project": "Security",
+    "Priority": 2,
+    "Tags": [
+      "ssl",
+      "security",
+      "certificates"
+    ],
+    "Recurrence": 4,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "12fe5979-f64f-418b-a747-73035f8c4863",
+    "Title": "Plan office party",
+    "Description": "Organize quarterly team building event",
+    "DueDate": "2025-04-18T00:00:00+02:00",
+    "CreatedDate": "2025-03-29T09:20:33.3289637+01:00",
+    "Status": 0,
+    "Project": "HR",
+    "Priority": 0,
+    "Tags": [
+      "event",
+      "team",
+      "morale"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "13fe5979-f64f-418b-a747-73035f8c4864",
+    "Title": "Create user manual",
+    "Description": "Write comprehensive guide for new application features",
+    "DueDate": "2025-05-05T00:00:00+02:00",
+    "CreatedDate": "2025-04-01T13:40:22.3289637+02:00",
+    "Status": 0,
+    "Project": "Documentation",
+    "Priority": 1,
+    "Tags": [
+      "manual",
+      "documentation",
+      "user"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "14fe5979-f64f-418b-a747-73035f8c4865",
+    "Title": "Optimize database queries",
+    "Description": "Improve performance of slow-running reports",
+    "DueDate": "2025-04-12T00:00:00+02:00",
+    "CreatedDate": "2025-03-30T09:15:48.3289637+02:00",
+    "Status": 0,
+    "Project": "Performance",
+    "Priority": 2,
+    "Tags": [
+      "database",
+      "optimization",
+      "performance"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "15fe5979-f64f-418b-a747-73035f8c4866",
+    "Title": "Submit timesheet",
+    "Description": "Complete weekly timesheet entry",
+    "DueDate": "2025-04-05T00:00:00+02:00",
+    "CreatedDate": "2025-04-01T17:00:00.3289637+02:00",
+    "Status": 0,
+    "Project": "Administrative",
+    "Priority": 1,
+    "Tags": [
+      "timesheet",
+      "weekly",
+      "admin"
+    ],
+    "Recurrence": 2,
+    "IsOverdue": false,
+    "IsDueSoon": true
+  },
+  {
+    "Id": "16fe5979-f64f-418b-a747-73035f8c4867",
+    "Title": "Pay vendor invoices",
+    "Description": "Process pending vendor payments",
+    "DueDate": "2025-04-10T00:00:00+02:00",
+    "CreatedDate": "2025-04-02T09:30:12.3289637+02:00",
+    "Status": 0,
+    "Project": "Finance",
+    "Priority": 2,
+    "Tags": [
+      "finance",
+      "invoices",
+      "vendors"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "17fe5979-f64f-418b-a747-73035f8c4868",
+    "Title": "Test new feature implementation",
+    "Description": "Verify functionality of shopping cart module",
+    "DueDate": "2025-04-07T00:00:00+02:00",
+    "CreatedDate": "2025-04-03T11:20:45.3289637+02:00",
+    "Status": 0,
+    "Project": "QA",
+    "Priority": 2,
+    "Tags": [
+      "testing",
+      "QA",
+      "features"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "18fe5979-f64f-418b-a747-73035f8c4869",
+    "Title": "Update project roadmap",
+    "Description": "Revise project timeline and milestones",
+    "DueDate": "2025-04-11T00:00:00+02:00",
+    "CreatedDate": "2025-03-28T13:45:33.3289637+01:00",
+    "Status": 0,
+    "Project": "ProjectManagement",
+    "Priority": 1,
+    "Tags": [
+      "roadmap",
+      "planning",
+      "milestones"
+    ],
+    "Recurrence": 0,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  },
+  {
+    "Id": "19fe5979-f64f-418b-a747-73035f8c4870",
+    "Title": "Run vulnerability scan",
+    "Description": "Perform monthly security assessment of systems",
+    "DueDate": "2025-04-30T00:00:00+02:00",
+    "CreatedDate": "2025-04-01T16:30:20.3289637+02:00",
+    "Status": 0,
+    "Project": "Security",
+    "Priority": 2,
+    "Tags": [
+      "security",
+      "scan",
+      "monthly"
+    ],
+    "Recurrence": 3,
+    "IsOverdue": false,
+    "IsDueSoon": false
+  }
+]
