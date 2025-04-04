@@ -18,6 +18,115 @@ This console application demonstrates advanced C# programming concepts:
 - State management with undo functionality
 - Data exports and backup strategies
 
+## Application Architecture
+
+### UML Class Diagram
+
+The following UML diagram illustrates the class structure and relationships in the application:
+
+```mermaid
+classDiagram
+    %% Model Classes
+    class Task {
+        +Id: Guid
+        +Title: string
+        +Description: string
+        +DueDate: DateTime
+        +Status: TaskStatus
+        +Project: string
+        +Priority: Priority
+        +Tags: List~string~
+        +Recurrence: Recurrence
+        +IsOverdue(): bool
+        +IsDueSoon(): bool
+    }
+
+    class TaskStatus {
+        <<enumeration>>
+        Pending
+        InProgress
+        Done
+    }
+
+    class Priority {
+        <<enumeration>>
+        Low
+        Medium
+        High
+        Critical
+    }
+
+    class Recurrence {
+        <<enumeration>>
+        None
+        Daily
+        Weekly
+        Monthly
+        Yearly
+        Weekdays
+        Weekends
+    }
+
+    %% Service Class
+    class TaskManager {
+        -_tasks: List~Task~
+        -_deletedTasks: List~Task~
+        +Add(Task)
+        +GetAll(): IEnumerable~Task~
+        +Delete(Guid): bool
+        +UndoDelete(): bool
+        +BulkDelete(List~Guid~): bool
+        +GetTaskStatistics(): Dictionary~string,int~
+        +ExportToCsv()
+    }
+
+    %% Utility Class
+    class NaturalDateParser {
+        <<static>>
+        +Parse(string): DateParseResult
+    }
+
+    class DateParseResult {
+        +Date: DateTime
+        +Success: bool
+        +ErrorMessage: string
+    }
+
+    %% UI Classes
+    class UIHelper {
+        <<static>>
+        +PrintTitle(string)
+        +PrintMenu(Dictionary~string,string~)
+        +GetTaskColor(Task): ConsoleColor
+        +ShowTask(Task)
+        +ListTasks(IEnumerable~Task~)
+    }
+
+    class TaskUI {
+        <<static>>
+        +SelectTask(TaskManager): Task
+        +AddTask(TaskManager)
+        +EditTask(TaskManager)
+        +ListTasks(TaskManager)
+    }
+
+    class MenuHandler {
+        <<static>>
+        +ShowMainMenu(TaskManager)
+    }
+
+    %% Relationships
+    Task "1" --> "1" TaskStatus: has
+    Task "1" --> "1" Priority: has
+    Task "1" --> "1" Recurrence: has
+    TaskManager "1" o-- "*" Task: manages
+    TaskManager ..> NaturalDateParser: uses
+    NaturalDateParser ..> DateParseResult: creates
+    TaskUI ..> TaskManager: uses
+    TaskUI ..> UIHelper: uses
+    MenuHandler ..> TaskUI: uses
+```
+
 ## Overview
 
 A sophisticated console-based task management application that goes beyond basic todo functionality. The application features an intuitive color-coded interface, comprehensive task management capabilities, and advanced filtering and sorting options to help users efficiently organize their personal and professional responsibilities.
